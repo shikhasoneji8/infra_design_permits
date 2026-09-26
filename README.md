@@ -1,5 +1,5 @@
 ---
-title: Permit Harness
+title: Grudge
 emoji: 🏗️
 colorFrom: blue
 colorTo: green
@@ -8,7 +8,9 @@ app_port: 7860
 pinned: false
 ---
 
-# Permit Harness: a data center that redesigns itself until New Jersey says yes
+# Grudge: a data center that redesigns itself until the permit passes
+
+*Powered by MongoDB Atlas. It never forgets a rejection.*
 
 Data centers take years to permit because every redesign starts from scratch.
 This harness never forgets a rejection.

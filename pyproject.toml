@@ -1,5 +1,5 @@
 [project]
-name = "permit-harness"
+name = "grudge"
 version = "0.1.0"
 description = "Long-horizon agent harness that designs a data center on a real NJ parcel, gets rejected by a strict permit reviewer, remembers every rejection in MongoDB Atlas, and redesigns until it passes."
 requires-python = ">=3.10"

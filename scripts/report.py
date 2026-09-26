@@ -133,7 +133,7 @@ def collect(store, run_id: str) -> dict:
             "layers": site_layers(site), "rounds": rounds}
 
 
-TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Permit Harness Replay</title>
+TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Grudge · replay</title>
 <style>
 :root{--blue:#005ea2;--blue-dark:#1a4480;--ink:#1b1b1b;--ink2:#565c65;--line:#dfe1e2;--bg:#f0f0f0;--panel:#ffffff;--green:#2e8540;--red:#b50909;--gold:#c2850c;--surface:#fcfcfb}
 *{box-sizing:border-box}
@@ -184,7 +184,7 @@ button.active{background:var(--blue-dark);box-shadow:inset 0 0 0 2px #fff,inset 
 footer{padding:14px 24px;color:var(--ink2);font-size:12px}
 </style></head><body>
 <div class="gov">Data center permit harness · rules cite N.J.A.C. 7:29 (noise), 7:7A (wetlands), 7:8 (stormwater), NJDEP air and water programs · demo values are marked</div>
-<header><h1>Permit Harness Replay</h1><div class="sub">A designer agent redesigns a 40 MW data center on a real New Jersey parcel until a code-scored permit review passes. Every rejection is remembered in MongoDB Atlas.</div></header>
+<header><h1>Grudge · replay</h1><div class="sub">A designer agent redesigns a 40 MW data center on a real New Jersey parcel until a code-scored permit review passes. Every rejection is remembered in MongoDB Atlas.</div></header>
 <main>
 <div class="howto" id="howto">
  <button class="close" onclick="document.getElementById('howto').style.display='none'" title="hide">×</button>

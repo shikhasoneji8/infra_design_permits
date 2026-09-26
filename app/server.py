@@ -37,7 +37,7 @@ STATIC = ROOT / "app" / "static"
 DATA = ROOT / "data" / "sites"
 OFFLINE = os.getenv("PH_OFFLINE", "") not in {"", "0", "false"}
 
-app = FastAPI(title="Permit Harness")
+app = FastAPI(title="Grudge")
 _store = None
 _jobs: dict[str, dict] = {}  # run_id -> {status, error, started}
 _lock = threading.Lock()
