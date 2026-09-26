@@ -21,7 +21,7 @@ console = Console()
 def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: bool = False,
         use_llm: bool = True, crash_after_round: int | None = None, sleep_s: float = 0.0,
         designer_model: str = C.DESIGNER_MODEL, reviewer_model: str = C.REVIEWER_MODEL,
-        use_memory: bool = True) -> dict:
+        use_memory: bool = True, use_llm_reviewer: bool | None = None) -> dict:
     store = store or MongoStore()
     site_doc = store.get_site(site_id)
     if not site_doc:
@@ -35,7 +35,8 @@ def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: boo
 
     graph = build_graph(store, use_llm=use_llm, crash_after_round=None if resume else crash_after_round,
                         designer_model=designer_model, reviewer_model=reviewer_model,
-                        on_round=_print_round, checkpointer=store.checkpointer(), use_memory=use_memory)
+                        on_round=_print_round, checkpointer=store.checkpointer(), use_memory=use_memory,
+                        use_llm_reviewer=use_llm_reviewer)
     cfg = {"configurable": {"thread_id": run_id}, "recursion_limit": max_rounds * 6 + 10}
 
     snapshot = graph.get_state(cfg)

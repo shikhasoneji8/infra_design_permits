@@ -146,11 +146,12 @@ class NewRun(BaseModel):
 def _worker(body: NewRun):
     rid = body.run_id
     try:
-        fast = body.speed == "fast"
+        speed = body.speed
         run_loop(body.site_id, rid, store=store(), max_rounds=body.max_rounds, resume=body.resume,
-                 use_llm=body.use_llm, crash_after_round=body.crash_after, use_memory=body.memory,
-                 designer_model=C.FAST_DESIGNER_MODEL if fast else C.DESIGNER_MODEL,
-                 reviewer_model=C.FAST_REVIEWER_MODEL if fast else C.REVIEWER_MODEL)
+                 use_llm=body.use_llm and speed != "instant", use_llm_reviewer=body.use_llm and speed == "quality",
+                 crash_after_round=body.crash_after, use_memory=body.memory,
+                 designer_model=C.FAST_DESIGNER_MODEL if speed == "fast" else C.DESIGNER_MODEL,
+                 reviewer_model=C.REVIEWER_MODEL)
         with _lock:
             _jobs[rid]["status"] = "finished"
     except SystemExit as e:

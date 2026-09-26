@@ -64,7 +64,9 @@ def retrieval_query(site: Site, prev_review: Review | None) -> str:
 
 def build_graph(store, use_llm: bool = True, crash_after_round: int | None = None,
                 designer_model: str = C.DESIGNER_MODEL, reviewer_model: str = C.REVIEWER_MODEL,
-                on_round=None, checkpointer=None, use_memory: bool = True):
+                on_round=None, checkpointer=None, use_memory: bool = True, use_llm_reviewer: bool | None = None):
+    if use_llm_reviewer is None:
+        use_llm_reviewer = use_llm
     site_cache: dict[str, Site] = {}
 
     def site_of(state) -> Site:
@@ -119,7 +121,7 @@ def build_graph(store, use_llm: bool = True, crash_after_round: int | None = Non
         site = site_of(state)
         plan = Plan.model_validate(state["plan"])
         rev = review_from_doc(state["review"])
-        rejection, new_lessons = reviewer.review(site, plan, rev, use_llm=use_llm, model=reviewer_model,
+        rejection, new_lessons = reviewer.review(site, plan, rev, use_llm=use_llm_reviewer, model=reviewer_model,
                                                  precedents=state.get("precedents", []))
         store.save_review(state["run_id"], state["site_id"], state["round"], state["design_id"], rev.to_doc(), rejection)
         if new_lessons:
