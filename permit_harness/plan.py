@@ -30,6 +30,7 @@ class Plan(BaseModel):
     it_mw: float = Field(default=C.TARGET_IT_MW, gt=0)
     cooling_type: Literal["air_cooled", "evaporative"] = "evaporative"
     cooling_noise: Literal["standard", "low_noise"] = "standard"
+    cooling_barrier: bool = Field(default=False, description="acoustic screen wall around the cooling yard (-8 dB)")
     generator_tier: Literal["tier2", "tier4f"] = "tier2"
     generator_enclosure: Literal["standard", "critical_silenced"] = "standard"
     bess_mw: float = Field(default=0.0, ge=0, description="battery storage replacing diesel gensets, MW")

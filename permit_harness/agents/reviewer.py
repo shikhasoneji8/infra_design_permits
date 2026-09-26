@@ -37,7 +37,7 @@ def review(site: Site, plan: Plan, rev: Review, use_llm: bool = True, model: str
 def _review_llm(site, plan, rev, model, precedents):
     summary = site.summary_for_llm()
     user = (f"SITE CONTEXT (homes by compass sector, wetlands): {json.dumps({k: summary[k] for k in ['homes_by_sector', 'wetlands', 'acres']})}\n\n"
-            f"PLAN CHOICES: it_mw={plan.it_mw}, cooling={plan.cooling_type}/{plan.cooling_noise}, "
+            f"PLAN CHOICES: it_mw={plan.it_mw}, cooling={plan.cooling_type}/{plan.cooling_noise}{'/barrier' if plan.cooling_barrier else ''}, "
             f"generators={plan.generators_required} {plan.generator_tier}/{plan.generator_enclosure}, bess_mw={plan.bess_mw}, water={plan.water_source}\n\n"
             f"VIOLATIONS (penalty {rev.penalty}):\n" +
             "\n".join(f"- {v.rule} {v.title}. Measured: {v.measured}. Limit: {v.limit}. Rule: {v.citation}. Objects: {v.objects[:6]}"
@@ -59,7 +59,7 @@ def _review_template(site: Site, plan: Plan, rev: Review) -> tuple[str, list[dic
     lessons = []
     templ = {
         "R0": f"Every object must sit inside the parcel and outside other footprints; place the full equipment list before anything else.",
-        "R1": f"When homes lie to the {home_sector}, put cooling on the {opposite} side of the hall and use the hall as a noise shield; low-noise fans if still over 50 dBA.",
+        "R1": f"When homes lie to the {home_sector}, put cooling on the {opposite} side of the hall and use the hall as a noise shield; low-noise fans, then an acoustic screen wall, if still over 50 dBA.",
         "R2": f"Line generators along the {opposite} wall of the hall so the building blocks them from homes to the {home_sector}; critically-silenced enclosures if still over 65 dBA.",
         "R3": "Design inside the buildable footprint (parcel minus wetlands and 50/150 ft transition areas); never let pavement touch a wetland buffer.",
         "R4": "Keep combined genset heat input under 100 MMBtu/hr (about 5 x 2 MW units) by covering part of the critical load with battery storage.",

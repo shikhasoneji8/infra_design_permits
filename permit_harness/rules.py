@@ -113,7 +113,7 @@ def evaluate(plan: Plan, site: Site) -> Review:
 
     # R1 / R2: noise
     gen_dba = C.GENERATOR_DBA_BY_ENCLOSURE[plan.generator_enclosure]
-    cool_dba = C.COOLING_DBA_BY_OPTION[plan.cooling_noise]
+    cool_dba = C.COOLING_DBA_BY_OPTION[plan.cooling_noise] - (C.COOLING_BARRIER_DB if plan.cooling_barrier else 0.0)
     night_sources = [(o, cool_dba, C.COOLING_REF_DISTANCE_M) for o in cools]
     if C.GENERATORS_RUN_AT_NIGHT:
         night_sources += [(o, gen_dba, C.GENERATOR_REF_DISTANCE_M) for o in gens]
@@ -129,7 +129,7 @@ def evaluate(plan: Plan, site: Site) -> Review:
                            limit=f"{C.NIGHT_LIMIT_RESIDENTIAL_DBA} dBA, 10 pm to 7 am",
                            citation="N.J.A.C. 7:29-1.2 (Noise Control), residential receiving property",
                            objects=[o.id for o in cools],
-                           detail="Cooling runs all night. Move it away from homes, put the data hall between them, or specify low-noise fan packages."))
+                           detail="Cooling runs all night. Move it away from homes, put the data hall between them, specify low-noise fan packages (cooling_noise), and if still over, an acoustic screen wall (cooling_barrier)."))
 
     day = noise_at_receivers(plan, site, day_sources, homes_near) if day_sources else []
     worst_day = max(day, key=lambda t: t[1]) if day else None

@@ -38,6 +38,7 @@ SCHEMA = {
     "it_mw": "number, target %.0f" % C.TARGET_IT_MW,
     "cooling_type": "air_cooled | evaporative",
     "cooling_noise": "standard | low_noise",
+    "cooling_barrier": "true | false (acoustic screen wall around the cooling yard, -8 dB)",
     "generator_tier": "tier2 | tier4f",
     "generator_enclosure": "standard | critical_silenced",
     "bess_mw": "number >= 0",
@@ -84,7 +85,8 @@ def _design_llm(site, prev_plan, prev_review, lessons, model, regression=None) -
         parts.append("Fix every rejection. Move things decisively (tens of metres, not two), keep everything inside the parcel "
                      "polygon and out of wetland buffers, and do not reintroduce problems you already solved. "
                      "Noise falls 6 dB per doubling of distance and the hall blocks 10 dB; if geometry cannot get you under the "
-                     "limit, change equipment (low_noise cooling, critical_silenced generators) instead of shrinking it_mw.")
+                     "limit, change equipment (low_noise cooling, then cooling_barrier, critical_silenced generators) instead of shrinking it_mw. "
+                     "Night noise is cooling only; a home 1 dB over the limit still fails, so escalate equipment rather than nudging.")
     else:
         parts.append("This is round 1. Produce a complete, buildable first plan.")
     parts.append("OUTPUT JSON SCHEMA:\n" + json.dumps(SCHEMA))
@@ -190,8 +192,11 @@ def heuristic_design(site: Site, prev_plan: Plan | None, prev_review: Review | N
                 o.x += direction[0] * step
                 o.y += direction[1] * step
     # Knob escalation once geometry alone has been tried
-    if "R1" in rules and prev_plan.cooling_noise == "standard" and _rounds_hint(prev_review) >= 2:
-        plan.cooling_noise = "low_noise"
+    if "R1" in rules and _rounds_hint(prev_review) >= 2:
+        if prev_plan.cooling_noise == "standard":
+            plan.cooling_noise = "low_noise"
+        elif not prev_plan.cooling_barrier:
+            plan.cooling_barrier = True
     if "R2" in rules and prev_plan.generator_enclosure == "standard" and _rounds_hint(prev_review) >= 2:
         plan.generator_enclosure = "critical_silenced"
     # Re-place anything invalid
@@ -227,9 +232,9 @@ def heuristic_design(site: Site, prev_plan: Plan | None, prev_review: Review | N
 
 
 def _rounds_hint(review: Review) -> int:
-    # The heuristic has no memory of its own; it escalates when noise is still far over the limit.
-    w = review.measured.get("night_dba_worst_home") or review.measured.get("day_dba_worst_home")
-    return 2 if (w and w[1] > 60) else 1
+    # The heuristic has no memory of its own. As a stall breaker it is called on a plan the model already
+    # moved as far as it could, so it goes straight to the equipment change.
+    return 2
 
 
 def _naive_first_plan(site: Site) -> Plan:

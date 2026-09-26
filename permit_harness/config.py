@@ -67,6 +67,9 @@ COOLING_REF_DISTANCE_M = 10.0
 # packages on dry coolers reach ~70 dBA at 10 m.
 GENERATOR_DBA_BY_ENCLOSURE = {"standard": GENERATOR_DBA_AT_REF, "critical_silenced": 70.0}
 COOLING_DBA_BY_OPTION = {"standard": COOLING_DBA_AT_REF, "low_noise": 70.0}
+# Solid acoustic screen wall around the cooling yard: 8 dB insertion loss is a conservative
+# figure for a barrier that breaks line of sight (FHWA barrier guidance: 5 dB minimum, 10+ typical).
+COOLING_BARRIER_DB = 8.0
 BUILDING_SHIELDING_DB = 10.0  # flat credit if the data hall blocks line of sight (our assumption)
 NIGHT_LIMIT_RESIDENTIAL_DBA = 50.0  # N.J.A.C. 7:29-1.2, 10pm-7am at residential property line
 DAY_LIMIT_RESIDENTIAL_DBA = 65.0  # N.J.A.C. 7:29-1.2, 7am-10pm
@@ -139,3 +142,6 @@ PENALTY_HARD = 10
 PENALTY_MEDIUM = 5
 PENALTY_SOFT = 1
 PENALTY_CAPACITY = 20
+
+# --- Harness control -----------------------------------------------------
+STALL_ROUNDS = 2  # best penalty unchanged this many rounds -> deterministic policy takes one round
