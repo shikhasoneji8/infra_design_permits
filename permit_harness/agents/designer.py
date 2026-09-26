@@ -212,9 +212,13 @@ def heuristic_design(site: Site, prev_plan: Plan | None, prev_review: Review | N
         plan.generator_enclosure = "critical_silenced"
     if "R9" in rules and not prev_plan.generator_screen:
         plan.generator_screen = True
-    # Re-place anything invalid
-    keep = [o for o in plan.objects if o.id not in offenders]
-    plan.objects = keep
+    # Re-place anything invalid. If the hall itself has to move, everything else is laid out again
+    # around it (otherwise generators and cooling squat on the only spot that clears the setback).
+    hall_ids = {o.id for o in plan.by_kind("data_hall")}
+    if offenders & hall_ids:
+        plan.objects = []
+    else:
+        plan.objects = [o for o in plan.objects if o.id not in offenders]
     plan = _repair(plan, site)
     # Regenerate generator list if count changed
     need = required_counts(plan)["generator"]
@@ -310,31 +314,39 @@ def _place(site: Site, plan: Plan, kind: str, w: float, l: float, h: float, anch
            obj_id: str, region=None) -> PlacedObject | None:
     """Grid search for a spot inside the buildable area: far from homes, near the anchor, no overlaps."""
     region = region if region is not None else site.buildable()
+    if kind in {"data_hall", "substation"} and site.homes:
+        # R8 is a hard constraint for buildings: search only where the residential setback is already met.
+        from shapely.ops import unary_union
+        clear = region.difference(unary_union([hh.geom.buffer(site.profile["setback_m"]) for hh in site.homes]))
+        if not clear.is_empty and clear.area > w * l:
+            region = clear
     minx, miny, maxx, maxy = region.bounds
     homes = sorted(site.homes, key=lambda hh: site.parcel.distance(hh.geom))[:40]
     comm = sorted(site.commercial, key=lambda hh: site.parcel.distance(hh.geom))[:20]
     existing = [o.footprint() for o in plan.objects]
+    reg = region.buffer(0.5)
     best, best_score = None, -1e18
-    step = 12.0
-    x = minx + w / 2
-    while x <= maxx - w / 2:
-        y = miny + l / 2
-        while y <= maxy - l / 2:
-            fp = PlacedObject(id=obj_id, kind=kind, x=x, y=y, w=w, l=l, h=h).footprint()
-            if region.buffer(0.5).contains(fp) and not any(fp.intersection(e).area > 1 for e in existing):
-                p = Point(x, y)
-                d_home = min((hh.geom.distance(p) for hh in homes), default=500.0)
-                if kind in {"generator", "cooling"}:
-                    # commercial neighbours have a 65 dBA limit too; count them at a discount
-                    d_home = min(d_home, min((hh.geom.distance(p) * 1.8 for hh in comm), default=500.0))
-                d_anchor = math.hypot(x - anchor[0], y - anchor[1])
-                weight = {"generator": 1.0, "cooling": 1.2, "data_hall": 1.5, "substation": 1.0,
-                          "parking": 0.2, "stormwater_basin": 0.1}[kind]
-                score = weight * d_home - 0.35 * d_anchor
-                if score > best_score:
-                    best, best_score = (x, y), score
-            y += step
-        x += step
+    weight = {"generator": 1.0, "cooling": 1.2, "data_hall": 1.5, "substation": 1.0,
+              "parking": 0.2, "stormwater_basin": 0.1}[kind]
+    # big footprints get a finer grid so narrow clear strips are not skipped; both orientations tried
+    step = 6.0 if w * l > 2000 else 12.0
+    for ww, ll in ((w, l), (l, w)) if w != l else ((w, l),):
+        x = minx + ww / 2
+        while x <= maxx - ww / 2:
+            y = miny + ll / 2
+            while y <= maxy - ll / 2:
+                fp = PlacedObject(id=obj_id, kind=kind, x=x, y=y, w=ww, l=ll, h=h).footprint()
+                if reg.contains(fp) and not any(fp.intersection(e).area > 1 for e in existing):
+                    p = Point(x, y)
+                    d_home = min((hh.geom.distance(p) for hh in homes), default=500.0)
+                    if kind in {"generator", "cooling"}:
+                        d_home = min(d_home, min((hh.geom.distance(p) * 1.8 for hh in comm), default=500.0))
+                    d_anchor = math.hypot(x - anchor[0], y - anchor[1])
+                    score = weight * d_home - 0.35 * d_anchor
+                    if score > best_score:
+                        best, best_score = (x, y, ww, ll), score
+                y += step
+            x += step
     if best is None:
         return None
-    return PlacedObject(id=obj_id, kind=kind, x=round(best[0], 1), y=round(best[1], 1), w=w, l=l, h=h)
+    return PlacedObject(id=obj_id, kind=kind, x=round(best[0], 1), y=round(best[1], 1), w=best[2], l=best[3], h=h)
