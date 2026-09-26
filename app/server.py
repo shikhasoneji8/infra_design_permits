@@ -92,6 +92,7 @@ def api_sites():
         full = s.get_site(d["_id"])
         site = site_from_doc(full)
         out.append({"site_id": d["_id"], "name": d.get("name"), "pin": d.get("pin"), "municipality": d.get("municipality"),
+                    "state": d.get("state", "NJ"), "rulebook": site.profile["name"],
                     "acres": round(site.acres, 1), "homes": len(site.homes), "wetlands": len(site.wetlands),
                     "buildable_acres": site.summary_for_llm()["buildable_area_acres"]})
     return out
@@ -109,6 +110,7 @@ class NewSite(BaseModel):
     pin: str
     site_id: str
     name: Optional[str] = None
+    state: str = "nj"
 
 
 @app.post("/api/sites")
@@ -118,7 +120,8 @@ def api_add_site(body: NewSite):
         raise HTTPException(400, "offline mode: cannot fetch from NJ GIS")
     site_id = body.site_id.strip().replace(" ", "_").lower()
     name = body.name or f"{body.pin} ({site_id})"
-    cmd = [sys.executable, str(ROOT / "scripts" / "fetch_site.py"), "--pin", body.pin.strip(), "--site-id", site_id, "--name", name]
+    cmd = [sys.executable, str(ROOT / "scripts" / "fetch_site.py"), "--state", body.state.lower(), "--pin", body.pin.strip(),
+           "--site-id", site_id, "--name", name]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if r.returncode != 0:
         raise HTTPException(500, f"fetch failed: {(r.stderr or r.stdout)[-600:]}")

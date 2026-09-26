@@ -117,5 +117,6 @@ enough that the rules bite:
 * `wayne_west_belt`: PAMS PIN 1614_302_72, Wayne. 36.3 acres, vacant. 120 homes within 300 m, 11 wetland polygons within 100 m.
 * `kenilworth_monroe`: PAMS PIN 2008_6_1.01, Kenilworth (CoreWeave is building on the old pharma campus amid water and noise pushback). 36 acres, industrial, 328 homes within 300 m, 9 wetland polygons.
 * `vineland_crystal`: PAMS PIN 0614_2326_1.01, Vineland (DataOne, 2.6M sq ft, approved despite noise and water outrage). 39 acres, industrial, 388 homes within 300 m.
+* `austin_gilbert_rd` and `austin_decker_lake` (Texas, Travis County): fetched with `--state tx` from TCAD parcels + USFWS National Wetlands Inventory, reviewed under the Austin / TCEQ rulebook (limits marked verify in `config.py`). Residential lots are inferred (TCAD has no land-use code).
 
-The harness works on any NJ parcel: `scripts/fetch_site.py --pin <PAMS_PIN> --site-id <name>`.
+The harness works on any NJ parcel (`--pin <PAMS_PIN>`) and any Travis County, TX parcel (`--state tx --pin <PROP_ID>`). Rulebooks are per-state profiles in `config.py`; the physics is shared.

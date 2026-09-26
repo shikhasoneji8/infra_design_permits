@@ -11,7 +11,7 @@ from ..plan import Plan
 from ..rules import Review
 from ..site import Site
 
-SYSTEM = """You are a senior New Jersey permit reviewer (NJDEP plus municipal zoning).
+SYSTEM = """You are a senior permit reviewer for the jurisdiction named in the site context (state environmental agency plus municipal zoning).
 You are given a site plan and the code-measured violations. Do not re-measure anything;
 the numbers are authoritative. Write like a permit officer: specific, cites the rule, no hedging.
 Then write LESSONS: short, general design rules another designer could apply on a different
@@ -36,7 +36,7 @@ def review(site: Site, plan: Plan, rev: Review, use_llm: bool = True, model: str
 
 def _review_llm(site, plan, rev, model, precedents):
     summary = site.summary_for_llm()
-    user = (f"SITE CONTEXT (homes by compass sector, wetlands): {json.dumps({k: summary[k] for k in ['homes_by_sector', 'wetlands', 'acres']})}\n\n"
+    user = (f"JURISDICTION: {site.profile['name']}\nSITE CONTEXT (homes by compass sector, wetlands): {json.dumps({k: summary[k] for k in ['homes_by_sector', 'wetlands', 'acres']})}\n\n"
             f"PLAN CHOICES: it_mw={plan.it_mw}, cooling={plan.cooling_type}/{plan.cooling_noise}{'/barrier' if plan.cooling_barrier else ''}, "
             f"generators={plan.generators_required} {plan.generator_tier}/{plan.generator_enclosure}, bess_mw={plan.bess_mw}, water={plan.water_source}\n\n"
             f"VIOLATIONS (penalty {rev.penalty}):\n" +

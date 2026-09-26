@@ -60,10 +60,11 @@ def satellite_layer(site: Site, local_bounds) -> dict:
     Fallback: Esri World Imagery."""
     from pyproj import Transformer
     import math
-    to_wgs = Transformer.from_crs("EPSG:32618", "EPSG:4326", always_xy=True)
-    to_utm = Transformer.from_crs("EPSG:4326", "EPSG:32618", always_xy=True)
+    epsg = getattr(site, "epsg", 32618)
+    to_wgs = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+    to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
     to_merc = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-    merc_to_utm = Transformer.from_crs("EPSG:3857", "EPSG:32618", always_xy=True)
+    merc_to_utm = Transformer.from_crs("EPSG:3857", f"EPSG:{epsg}", always_xy=True)
     ox, oy = site.origin_utm
     minx, miny, maxx, maxy = local_bounds
     pad = 0.04 * max(maxx - minx, maxy - miny)
@@ -87,13 +88,21 @@ def satellite_layer(site: Site, local_bounds) -> dict:
     w_px = 1600
     h_px = int(w_px * (my1 - my0) / (mx1 - mx0))
     bbox = f"{mx0},{my0},{mx1},{my1}"
+    nj = ("https://img.nj.gov/imagerywms/Natural2020?service=WMS&version=1.1.1&request=GetMap&layers=Natural2020"
+          f"&styles=&srs=EPSG:3857&bbox={bbox}&width={w_px}&height={h_px}&format=image/jpeg")
+    esri = ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+            f"?bbox={bbox}&bboxSR=3857&imageSR=3857&size={w_px},{h_px}&format=jpg&f=image")
+    usgs = ("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
+            f"?bbox={bbox}&bboxSR=3857&imageSR=3857&size={w_px},{h_px}&format=jpg&f=image")
+    prof = site.profile
+    if getattr(site, "state", "NJ") == "NJ":
+        url, fallback, credit = nj, esri, "Imagery: NJ 2020 Natural Color Orthophotography, 1 ft (NJOGIS); fallback Esri World Imagery."
+    else:
+        url, fallback, credit = esri, usgs, "Imagery: Esri World Imagery (Maxar, Earthstar Geographics); fallback USGS National Map."
     return {
         "cx": round(cx_u - ox, 2), "cy": round(cy_u - oy, 2), "w": round(w_m, 2), "h": round(h_m, 2), "rot": round(rot, 4),
-        "url": ("https://img.nj.gov/imagerywms/Natural2020?service=WMS&version=1.1.1&request=GetMap&layers=Natural2020"
-                f"&styles=&srs=EPSG:3857&bbox={bbox}&width={w_px}&height={h_px}&format=image/jpeg"),
-        "fallback": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
-                     f"?bbox={bbox}&bboxSR=3857&imageSR=3857&size={w_px},{h_px}&format=jpg&f=image"),
-        "credit": "Imagery: NJ 2020 Natural Color Orthophotography, 1 ft (NJOGIS); fallback Esri World Imagery (Maxar, Earthstar Geographics). Parcels: NJOGIS. Wetlands: NJDEP 2020.",
+        "url": url, "fallback": fallback,
+        "credit": f"{credit} Parcels: {prof['parcel_source']}. Wetlands: {prof['wetland_source']}.",
     }
 
 

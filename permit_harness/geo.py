@@ -12,17 +12,35 @@ from pyproj import Transformer
 from shapely.geometry import Polygon, MultiPolygon, shape, mapping
 from shapely.ops import transform, unary_union
 
-_TO_UTM = Transformer.from_crs("EPSG:4326", "EPSG:32618", always_xy=True)
-_TO_WGS = Transformer.from_crs("EPSG:32618", "EPSG:4326", always_xy=True)
+from functools import lru_cache
+import math
+
+DEFAULT_EPSG = 32618  # UTM 18N (New Jersey)
 
 
-def geojson_to_utm(geom_geojson: dict) -> Polygon | MultiPolygon:
+def utm_epsg_for(lon: float, lat: float) -> int:
+    """WGS84 UTM zone EPSG code for a point (northern hemisphere)."""
+    zone = int(math.floor((lon + 180) / 6)) + 1
+    return (32600 if lat >= 0 else 32700) + zone
+
+
+@lru_cache(maxsize=32)
+def _to_utm(epsg: int) -> Transformer:
+    return Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+
+
+@lru_cache(maxsize=32)
+def _to_wgs(epsg: int) -> Transformer:
+    return Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+
+
+def geojson_to_utm(geom_geojson: dict, epsg: int = DEFAULT_EPSG) -> Polygon | MultiPolygon:
     g = shape(geom_geojson)
-    return transform(_TO_UTM.transform, g)
+    return transform(_to_utm(epsg).transform, g)
 
 
-def utm_to_geojson(g) -> dict:
-    return mapping(transform(_TO_WGS.transform, g))
+def utm_to_geojson(g, epsg: int = DEFAULT_EPSG) -> dict:
+    return mapping(transform(_to_wgs(epsg).transform, g))
 
 
 def to_local(g, origin_xy: tuple[float, float]):
@@ -35,8 +53,8 @@ def from_local(g, origin_xy: tuple[float, float]):
     return transform(lambda x, y, z=None: (x + ox, y + oy), g)
 
 
-def local_to_geojson(g, origin_xy: tuple[float, float]) -> dict:
-    return utm_to_geojson(from_local(g, origin_xy))
+def local_to_geojson(g, origin_xy: tuple[float, float], epsg: int = DEFAULT_EPSG) -> dict:
+    return utm_to_geojson(from_local(g, origin_xy), epsg)
 
 
 def largest_polygon(g) -> Polygon:

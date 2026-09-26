@@ -87,6 +87,7 @@ def noise_at_receivers(plan: Plan, site: Site, sources: list[tuple[PlacedObject,
 def evaluate(plan: Plan, site: Site) -> Review:
     V: list[Violation] = []
     measured: dict = {}
+    P = site.profile
     counts = required_counts(plan)
     gens = plan.by_kind("generator")
     cools = plan.by_kind("cooling")
@@ -123,11 +124,11 @@ def evaluate(plan: Plan, site: Site) -> Review:
     night = noise_at_receivers(plan, site, night_sources, homes_near) if night_sources else []
     worst_night = max(night, key=lambda t: t[1]) if night else None
     measured["night_dba_worst_home"] = worst_night
-    if worst_night and worst_night[1] > C.NIGHT_LIMIT_RESIDENTIAL_DBA:
+    if worst_night and worst_night[1] > P["night_dba"]:
         V.append(Violation("R1", "Night-time noise at a residence", "hard", C.PENALTY_HARD,
                            measured=f"{worst_night[1]} dBA at property line of {worst_night[0]} ({worst_night[2]} m from nearest cooling unit)",
-                           limit=f"{C.NIGHT_LIMIT_RESIDENTIAL_DBA} dBA, 10 pm to 7 am",
-                           citation="N.J.A.C. 7:29-1.2 (Noise Control), residential receiving property",
+                           limit=f"{P['night_dba']} dBA, 10 pm to 7 am",
+                           citation=P["noise_citation"] + ", residential receiving property",
                            objects=[o.id for o in cools],
                            detail="Cooling runs all night. Move it away from homes, put the data hall between them, specify low-noise fan packages (cooling_noise), and if still over, an acoustic screen wall (cooling_barrier)."))
 
@@ -137,14 +138,14 @@ def evaluate(plan: Plan, site: Site) -> Review:
     comm = noise_at_receivers(plan, site, day_sources, site.commercial[:40]) if day_sources else []
     worst_comm = max(comm, key=lambda t: t[1]) if comm else None
     measured["dba_worst_commercial"] = worst_comm
-    day_fail = worst_day and worst_day[1] > C.DAY_LIMIT_RESIDENTIAL_DBA
-    comm_fail = worst_comm and worst_comm[1] > C.LIMIT_COMMERCIAL_DBA
+    day_fail = worst_day and worst_day[1] > P["day_dba"]
+    comm_fail = worst_comm and worst_comm[1] > P["commercial_dba"]
     if day_fail or comm_fail:
         w = worst_day if day_fail else worst_comm
         V.append(Violation("R2", "Day-time noise at a neighbor (generator testing)", "hard", C.PENALTY_HARD,
                            measured=f"{w[1]} dBA at {w[0]} ({w[2]} m from nearest source)",
-                           limit=f"{C.DAY_LIMIT_RESIDENTIAL_DBA} dBA residential 7 am-10 pm; {C.LIMIT_COMMERCIAL_DBA} dBA commercial any time",
-                           citation="N.J.A.C. 7:29-1.2; CSG Law summary of NJ noise limits",
+                           limit=f"{P['day_dba']} dBA residential 7 am-10 pm; {P['commercial_dba']} dBA commercial any time",
+                           citation=P["noise_citation"],
                            objects=[o.id for o in gens],
                            detail="Generators are tested by day. Cluster them on the far side of the hall from homes or use critically-silenced enclosures."))
 
@@ -159,8 +160,8 @@ def evaluate(plan: Plan, site: Site) -> Review:
     if hits:
         V.append(Violation("R3", "Structure or pavement inside a wetland transition area", "hard", C.PENALTY_HARD,
                            measured=f"{len(hits)} object(s) in buffer, e.g. {hits[0][0]} in {hits[0][2]} m buffer of {hits[0][1].lower()}",
-                           limit="150 ft from exceptional-value wetlands, 50 ft from intermediate, 0 ft from ordinary",
-                           citation="N.J.A.C. 7:7A-3.3 (Freshwater Wetlands Protection Act transition areas)",
+                           limit=P["wetland_limit_text"],
+                           citation=P["wetland_citation"],
                            objects=[h[0] for h in hits],
                            detail="Pull everything out of the buffer. The buildable footprint excludes wetlands and their buffers."))
 
@@ -168,34 +169,34 @@ def evaluate(plan: Plan, site: Site) -> Review:
     n_gen = len(gens)
     heat = n_gen * C.GENERATOR_HEAT_INPUT_MMBTU_HR
     measured["generator_heat_input_mmbtu_hr"] = round(heat, 1)
-    if heat > C.GP005A_MAX_COMBINED_HEAT_INPUT:
+    if P["gen_heat_cap_mmbtu"] is not None and heat > P["gen_heat_cap_mmbtu"]:
         V.append(Violation("R4", "Generators exceed the air general permit cap", "medium", C.PENALTY_MEDIUM,
                            measured=f"{n_gen} gensets x {C.GENERATOR_HEAT_INPUT_MMBTU_HR} = {heat:.0f} MMBtu/hr combined",
-                           limit=f"{C.GP005A_MAX_COMBINED_HEAT_INPUT} MMBtu/hr combined to stay on GP-005A; above that is a slow custom preconstruction permit",
-                           citation="NJDEP General Permit GP-005A (emergency generators), All4 Inc. summary",
+                           limit=f"{P['gen_heat_cap_mmbtu']} MMBtu/hr combined to stay on the general permit; above that is a slow custom preconstruction permit",
+                           citation=P["gen_heat_citation"],
                            objects=[o.id for o in gens],
                            detail="Fewer diesel units: cover part of the critical load with battery storage (bess_mw) so the genset count drops."))
 
     # R5: NOx potential to emit
     nox_tpy = n_gen * C.GENERATOR_KW * C.PTE_HOURS_PER_YEAR * C.GENERATOR_NOX_BY_TIER[plan.generator_tier] / 907_184.74
     measured["nox_pte_tpy"] = round(nox_tpy, 1)
-    if nox_tpy > C.NOX_MAJOR_SOURCE_TPY:
+    if nox_tpy > P["nox_major_tpy"]:
         V.append(Violation("R5", "Facility NOx potential-to-emit makes it a Title V major source", "hard", C.PENALTY_HARD,
                            measured=f"{nox_tpy:.1f} tons/yr NOx ({n_gen} x {C.GENERATOR_KW:.0f} kW x {C.PTE_HOURS_PER_YEAR} hr x {C.GENERATOR_NOX_BY_TIER[plan.generator_tier]} g/kWh, {plan.generator_tier})",
-                           limit=f"{C.NOX_MAJOR_SOURCE_TPY} tons/yr",
-                           citation="NJDEP ACE Academy: major source thresholds in NJ (ozone non-attainment)",
+                           limit=f"{P['nox_major_tpy']} tons/yr",
+                           citation=P["nox_citation"],
                            objects=[o.id for o in gens],
                            detail="Specify Tier 4 Final gensets (SCR) or cut the diesel count with battery storage."))
 
     # R6: water allocation
     gpd = plan.it_mw * 1000 * 24 * C.WATER_GAL_PER_KWH[plan.cooling_type]
     measured["water_gpd"] = round(gpd)
-    threshold = C.WATER_ALLOCATION_PERMIT_GPD_HIGHLANDS if site.highlands_preservation else C.WATER_ALLOCATION_PERMIT_GPD
-    if plan.water_source == "well" and gpd > threshold:
+    threshold = C.WATER_ALLOCATION_PERMIT_GPD_HIGHLANDS if site.highlands_preservation else P["water_gpd"]
+    if threshold is not None and plan.water_source == "well" and gpd > threshold:
         V.append(Violation("R6", "Water withdrawal needs a Water Allocation Permit", "medium", C.PENALTY_MEDIUM,
                            measured=f"{gpd:,.0f} gal/day ({plan.cooling_type} cooling at {plan.it_mw} MW IT, from {plan.water_source})",
                            limit=f"{threshold:,} gal/day from wells or streams",
-                           citation="NJDEP Water Allocation Permit program (N.J.A.C. 7:19)",
+                           citation=P["water_citation"],
                            detail="Switch to closed-loop air cooling, or buy municipal water (then the utility holds the allocation)."))
 
     # R7: stormwater
@@ -206,11 +207,11 @@ def evaluate(plan: Plan, site: Site) -> Review:
     measured["new_impervious_acres"] = round(imp_acres, 2)
     measured["stormwater_basin_m2"] = round(basin_area)
     need = C.STORMWATER_BASIN_FRACTION * impervious
-    if imp_acres >= C.MAJOR_DEV_NEW_IMPERVIOUS_ACRES and basin_area < need:
+    if imp_acres >= P["storm_impervious_acres"] and basin_area < need:
         V.append(Violation("R7", "Major development without a stormwater basin", "medium", C.PENALTY_MEDIUM,
                            measured=f"{imp_acres:.1f} acres new impervious, basin {basin_area:.0f} m2 (need {need:.0f} m2)",
-                           limit="0.25 acre new impervious = major development; reserve basin area (10% of impervious, our sizing)",
-                           citation="N.J.A.C. 7:8-1.2 (Stormwater Management Rules)",
+                           limit=f"{P['storm_impervious_acres']} acre new impervious triggers stormwater management; reserve basin area (10% of impervious, our sizing)",
+                           citation=P["storm_citation"],
                            detail="Add a stormwater_basin object of at least the required area, on the low side, outside wetland buffers."))
 
     # R8: residential setback for buildings
@@ -218,15 +219,15 @@ def evaluate(plan: Plan, site: Site) -> Review:
     for o in halls + plan.by_kind("substation"):
         for h in homes_near:
             d = o.footprint().distance(h.geom)
-            if d < C.RESIDENTIAL_SETBACK_M:
+            if d < P["setback_m"]:
                 setback_hits.append((o.id, h.pin, round(d, 1)))
     measured["setback_hits"] = setback_hits[:5]
     if setback_hits:
         worst = min(setback_hits, key=lambda t: t[2])
         V.append(Violation("R8", "Building inside the residential setback", "hard", C.PENALTY_HARD,
                            measured=f"{worst[0]} is {worst[2]} m from residential lot {worst[1]}",
-                           limit=f"{C.RESIDENTIAL_SETBACK_M:.1f} m (200 ft) from any residential lot line (demo value; set per municipality)",
-                           citation="Local zoning; cf. Loudoun County VA data center setback and noise ordinance (2024)",
+                           limit=f"{P['setback_m']:.1f} m: {P['setback_text']}",
+                           citation=P["setback_citation"],
                            objects=[worst[0]],
                            detail="Shift the hall and substation toward the side of the parcel with no homes."))
 

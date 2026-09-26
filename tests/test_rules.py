@@ -99,3 +99,24 @@ def test_second_site_learns_faster(site):
     # lessons were retrieved for site 2 round 1
     d = store.get_design("b:r1")
     assert d["lessons_used"]
+
+
+def test_texas_profile_and_projection():
+    from permit_harness.geo import utm_epsg_for
+    b = bundle(site_id="tx_syn", lon=-97.62, lat=30.29)
+    b["state"] = "TX"
+    doc = site_doc_from_geojson_bundle(b)
+    assert doc["epsg"] == utm_epsg_for(-97.62, 30.29) == 32614
+    s = site_from_doc(doc)
+    assert s.state == "TX" and "Texas" in s.profile["name"]
+    assert 30 < s.acres < 40  # projection is sane in UTM 14N
+    assert s.wetlands[0].buffer_m > 45  # Austin CEF 150 ft
+    plan = designer.heuristic_design(s, None, None)
+    rev = evaluate(plan, s)
+    rules = {v.rule for v in rev.violations}
+    assert "R4" not in rules and "R6" not in rules  # no TX heat-input cap or water allocation rule
+    assert "R1" in rules
+    store = MemoryStore()
+    store.upsert_site(doc)
+    r = run("tx_syn", "tx1", store=store, max_rounds=15, use_llm=False)
+    assert r["status"] == "passed"

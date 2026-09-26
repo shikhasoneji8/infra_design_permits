@@ -14,13 +14,27 @@ from ..plan import Plan, PlacedObject, required_counts
 from ..rules import Review
 from ..site import Site
 
-SYSTEM = """You are the site designer for a data center developer in New Jersey.
+SYSTEM = """You are the site designer for a data center developer.
 You place equipment on a real parcel. Coordinates are metres; origin (0,0) is the parcel centroid,
 x is east, y is north. Every object is an axis-aligned rectangle centred at (x, y).
 A strict permit reviewer will measure your plan with code (noise propagation, wetland buffers,
 setbacks, air and water thresholds). You cannot argue with the reviewer; you can only redesign.
 Keep the facility useful: do not cut it_mw below 80% of the target to dodge rules.
 Return ONLY a JSON object matching the schema. No prose outside the JSON."""
+
+
+def rules_text(P: dict) -> str:
+    parts = [f"night noise {P['night_dba']} dBA and day noise {P['day_dba']} dBA at any home's lot line ({P['noise_citation']})",
+             f"wetlands: {P['wetland_limit_text']} ({P['wetland_citation']})"]
+    if P["gen_heat_cap_mmbtu"] is not None:
+        parts.append(f"air general permit cap {P['gen_heat_cap_mmbtu']} MMBtu/hr combined genset heat input, 19 MMBtu/hr each ({P['gen_heat_citation']})")
+    parts.append(f"NOx potential-to-emit under {P['nox_major_tpy']} t/yr ({P['nox_citation']})")
+    if P["water_gpd"] is not None:
+        parts.append(f"well water under {P['water_gpd']:,} gal/day ({P['water_citation']})")
+    parts.append(f"stormwater basin once impervious >= {P['storm_impervious_acres']} acre ({P['storm_citation']})")
+    parts.append(f"building setback {P['setback_text']} ({P['setback_citation']})")
+    parts.append("generators should be hidden behind the hall from homes")
+    return "; ".join(parts) + "."
 
 
 def _equipment_text(plan_hint: Plan | None) -> str:
@@ -66,11 +80,7 @@ def design(site: Site, prev_plan: Plan | None, prev_review: Review | None, lesso
 def _design_llm(site, prev_plan, prev_review, lessons, model, regression=None) -> Plan:
     parts = [f"SITE:\n{json.dumps(site.summary_for_llm(), indent=1)}",
              f"EQUIPMENT TO PLACE:\n{_equipment_text(prev_plan)}",
-             "RULES THE REVIEWER APPLIES (limits): night noise 50 dBA and day noise 65 dBA at any home's lot line; "
-             "150 ft / 50 ft / 0 ft wetland buffers (exceptional/intermediate/ordinary); GP-005A air permit cap 100 MMBtu/hr "
-             "combined genset heat input (19 MMBtu/hr each); NOx potential-to-emit under 25 t/yr; well water under 100,000 gal/day; "
-             "stormwater basin once impervious >= 0.25 acre; 200 ft building setback from residential lots; "
-             "generators should be hidden behind the hall from homes.",
+             "RULES THE REVIEWER APPLIES (" + site.profile["name"] + "): " + rules_text(site.profile),
              ]
     if lessons:
         parts.append("LESSONS FROM PREVIOUS PERMIT REJECTIONS (retrieved from memory, apply the relevant ones):\n" +

@@ -19,9 +19,17 @@ import sys
 import requests
 
 PARCELS = "https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query"
+# Texas (Travis County / Austin): county appraisal district parcels + federal National Wetlands Inventory.
+TX_PARCELS = "https://gis.traviscountytx.gov/server1/rest/services/Boundaries_and_Jurisdictions/TCAD_public/MapServer/0/query"
+NWI = "https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query"
 WETLANDS = "https://services1.arcgis.com/QWdNfRs7lkPq4g4Q/arcgis/rest/services/Wetlands_2020/FeatureServer/14/query"
 OUT = pathlib.Path(__file__).resolve().parents[1] / "data" / "sites"
 
+TX_DEMO_SITES = [
+    # East Austin, near Decker Lake and the Colony Park area: 27 ac tract with 165 small lots within 300 m.
+    {"pin": "782904", "site_id": "austin_gilbert_rd", "name": "5412 Gilbert Rd, Austin TX (27 ac, Travis County)"},
+    {"pin": "201589", "site_id": "austin_decker_lake", "name": "9801 Decker Lake Rd, Austin TX (27 ac, Travis County)"},
+]
 DEMO_SITES = [
     # Wayne: dev site, dense homes and wetlands so every rule bites.
     {"pin": "1614_302_72", "site_id": "wayne_west_belt", "name": "West Belt, Wayne NJ (36 ac vacant)"},
@@ -94,19 +102,74 @@ def fetch(pin: str, site_id: str, name: str, neighbor_radius_m: int = 400, wetla
     }
 
 
+def fetch_tx(pin: str, site_id: str, name: str, neighbor_radius_m: int = 400, wetland_radius_m: int = 150) -> dict:
+    """Travis County, Texas. TCAD parcels carry no land-use code, so residential lots are inferred:
+    under 0.6 acre with a platted LOT in the legal description. Wetlands from the USFWS NWI; every
+    NWI wetland is treated as an Austin Critical Environmental Feature (150 ft setback)."""
+    from shapely.geometry import shape
+    from shapely.geometry.polygon import orient
+    print(f"[{site_id}] Travis County parcel {pin} ...", end=" ", flush=True)
+    parcel = q(TX_PARCELS, where=f"PROP_ID={int(pin)}", outFields="PROP_ID,situs_address,situs_city,tcad_acres,legal_desc",
+               returnGeometry="true", outSR="4326")
+    if not parcel["features"]:
+        raise SystemExit(f"no Travis County parcel with PROP_ID {pin}")
+    pf = parcel["features"][0]
+    pf["properties"]["county"] = "TRAVIS"
+    geom = pf["geometry"]
+    simple = orient(shape(geom).simplify(0.00003, preserve_topology=True), sign=-1.0)
+    if simple.geom_type == "MultiPolygon":
+        simple = max(simple.geoms, key=lambda p: p.area)
+    esri_geom = {"rings": [list(map(list, simple.exterior.coords))], "spatialReference": {"wkid": 4326}}
+    print(f"{pf['properties'].get('tcad_acres')} ac")
+
+    print(f"[{site_id}] neighbors within {neighbor_radius_m} m ...", end=" ", flush=True)
+    neighbors = q(TX_PARCELS, where="1=1", geometry=json.dumps(esri_geom), geometryType="esriGeometryPolygon", inSR="4326",
+                  spatialRel="esriSpatialRelIntersects", distance=str(neighbor_radius_m), units="esriSRUnit_Meter",
+                  outFields="PROP_ID,situs_address,tcad_acres,legal_desc", returnGeometry="true", outSR="4326",
+                  maxAllowableOffset="0.00002", resultRecordCount="1500")
+    feats = []
+    for f in neighbors["features"]:
+        a = f["properties"]
+        if str(a.get("PROP_ID")) == str(pin):
+            continue
+        acres = float(a.get("tcad_acres") or 0)
+        legal = (a.get("legal_desc") or "").upper()
+        residential = acres < 0.6 and "LOT" in legal
+        a["PROP_CLASS"] = "2" if residential else ("4A" if acres >= 0.6 else "1")
+        feats.append(f)
+    neighbors["features"] = feats
+    homes = sum(1 for f in feats if f["properties"]["PROP_CLASS"] == "2")
+    print(f"{len(feats)} parcels, {homes} inferred residential")
+
+    print(f"[{site_id}] NWI wetlands within {wetland_radius_m} m ...", end=" ", flush=True)
+    wet = q(NWI, where="1=1", geometry=json.dumps(esri_geom), geometryType="esriGeometryPolygon", inSR="4326",
+            spatialRel="esriSpatialRelIntersects", distance=str(wetland_radius_m), units="esriSRUnit_Meter",
+            outFields="*", returnGeometry="true", outSR="4326", maxAllowableOffset="0.00002")
+    for f in wet["features"]:
+        pr = f["properties"]
+        pr["WETLAND_TYPE"] = pr.get("WETLAND_TYPE") or pr.get("Wetlands.WETLAND_TYPE") or "WETLAND"
+        pr["resource_class"] = "exceptional"  # Austin CEF: 150 ft
+    print(f"{len(wet['features'])} polygons: {sorted({f['properties']['WETLAND_TYPE'] for f in wet['features']})}")
+    return {"site_id": site_id, "name": name, "parcel": pf, "neighbors": neighbors, "wetlands": wet,
+            "highlands_preservation": False, "state": "TX",
+            "sources": {"parcels": TX_PARCELS, "wetlands": NWI, "fetched_with": "scripts/fetch_site.py --state tx",
+                        "note": "residential lots inferred (<0.6 ac with platted LOT); TCAD has no land-use code"}}
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--state", default="nj", choices=["nj", "tx"])
     ap.add_argument("--pin")
     ap.add_argument("--site-id")
     ap.add_argument("--name")
     ap.add_argument("--all", action="store_true", help="fetch the two demo sites")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    jobs = DEMO_SITES if a.all else [{"pin": a.pin, "site_id": a.site_id, "name": a.name or a.site_id}]
+    jobs = (TX_DEMO_SITES if a.state == "tx" else DEMO_SITES) if a.all else [{"pin": a.pin, "site_id": a.site_id, "name": a.name or a.site_id}]
     if not a.all and not (a.pin and a.site_id):
         ap.error("--pin and --site-id, or --all")
     for j in jobs:
-        b = fetch(**j)
+        b = fetch_tx(**j) if a.state == "tx" else fetch(**j)
         p = OUT / f"{j['site_id']}.json"
         p.write_text(json.dumps(b))
         print(f"[{j['site_id']}] wrote {p} ({p.stat().st_size // 1024} KB)")

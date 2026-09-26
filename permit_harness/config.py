@@ -150,3 +150,43 @@ PENALTY_CAPACITY = 20
 
 # --- Harness control -----------------------------------------------------
 STALL_ROUNDS = 2  # best penalty unchanged this many rounds -> deterministic policy takes one round
+
+# --- State rulebooks -------------------------------------------------------
+# The physics (noise propagation, geometry, air/water math) is identical everywhere; only the
+# limits and citations change. Values marked (verify) are demo values that need a local check.
+STATE_PROFILES: dict[str, dict] = {
+    "NJ": {
+        "name": "New Jersey (NJDEP + municipal)",
+        "night_dba": 50.0, "day_dba": 65.0, "commercial_dba": 65.0,
+        "noise_citation": "N.J.A.C. 7:29-1.2 (Noise Control)",
+        "buffer_by_class": {"exceptional": 150 * FT, "intermediate": 50 * FT, "ordinary": 0.0},
+        "wetland_citation": "N.J.A.C. 7:7A-3.3 (Freshwater Wetlands Protection Act transition areas)",
+        "wetland_limit_text": "150 ft from exceptional-value wetlands, 50 ft from intermediate, 0 ft from ordinary",
+        "gen_heat_cap_mmbtu": 100.0, "gen_heat_citation": "NJDEP General Permit GP-005A (emergency generators), All4 Inc. summary",
+        "nox_major_tpy": 25.0, "nox_citation": "NJDEP ACE Academy: major source thresholds in NJ (ozone non-attainment)",
+        "water_gpd": 100_000, "water_citation": "NJDEP Water Allocation Permit program (N.J.A.C. 7:19)",
+        "storm_impervious_acres": 0.25, "storm_citation": "N.J.A.C. 7:8-1.2 (Stormwater Management Rules)",
+        "setback_m": 200 * FT, "setback_citation": "Local zoning; cf. Loudoun County VA data center setback and noise ordinance (2024)",
+        "setback_text": "200 ft from any residential lot line (demo value; set per municipality)",
+        "parcel_source": "NJOGIS Parcels and MOD-IV Composite", "wetland_source": "NJDEP Land Use/Land Cover 2020",
+    },
+    "TX": {
+        "name": "Texas: Travis County / City of Austin (TCEQ + Austin LDC)",
+        "night_dba": 55.0, "day_dba": 65.0, "commercial_dba": 70.0,
+        "noise_citation": "City of Austin Code Ch. 9-2 (noise); TX has no statewide limit; 55/65 dBA are demo values (verify)",
+        "buffer_by_class": {"exceptional": 150 * FT, "intermediate": 150 * FT, "ordinary": 0.0},
+        "wetland_citation": "City of Austin LDC 25-8-281 Critical Environmental Features: 150 ft wetland setback; federal CWA 404",
+        "wetland_limit_text": "150 ft setback from wetlands mapped as Critical Environmental Features (Austin); no statewide TX buffer",
+        "gen_heat_cap_mmbtu": None, "gen_heat_citation": "TCEQ Permit by Rule 30 TAC 106.511 (emergency generators); no combined heat-input cap",
+        "nox_major_tpy": 100.0, "nox_citation": "TCEQ Title V (30 TAC 122): 100 tpy major source; Austin is in ozone attainment (verify)",
+        "water_gpd": None, "water_citation": "No state water-allocation permit for municipal supply; groundwater governed by local district (verify)",
+        "storm_impervious_acres": 1.0, "storm_citation": "TPDES Construction General Permit TXR150000 (1 acre disturbance); Austin LDC 25-8 impervious cover",
+        "setback_m": 100 * FT, "setback_citation": "Austin LDC compatibility standards (demo value, verify)",
+        "setback_text": "100 ft from any residential lot line (demo value; Austin compatibility standards vary by zone)",
+        "parcel_source": "Travis Central Appraisal District parcels (Travis County GIS)", "wetland_source": "USFWS National Wetlands Inventory",
+    },
+}
+
+
+def profile(state: str | None) -> dict:
+    return STATE_PROFILES.get((state or "NJ").upper(), STATE_PROFILES["NJ"])
