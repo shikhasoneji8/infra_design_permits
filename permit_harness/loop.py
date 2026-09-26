@@ -67,7 +67,13 @@ def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: boo
         t0 = time.time()
         # 1. remember: pull lessons relevant to this site and the last rejection
         q_emb = embed([_retrieval_query(site, prev_review)])[0]
-        lessons = store.similar_lessons(q_emb, k=6)
+        lessons, seen = [], set()
+        for l in store.similar_lessons(q_emb, k=12):
+            key = (l.get("text") or "").strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                lessons.append(l)
+        lessons = lessons[:6]
         # 2. design
         plan, source = designer.design(site, prev_plan, prev_review, lessons, use_llm=use_llm, model=designer_model)
         # 3. measure (code, not AI)
