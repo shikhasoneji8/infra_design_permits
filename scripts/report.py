@@ -115,7 +115,7 @@ def collect(store, run_id: str) -> dict:
         rounds.append({"round": n, "penalty": rv["penalty"], "passed": rv["passed"], "objects": objs,
                        "violations": [{"rule": v["rule"], "title": v["title"], "measured": v["measured"], "penalty": v["penalty"]}
                                       for v in rv["violations"]],
-                       "rejection": rv.get("rejection_text", ""), "lessons_used": d.get("lessons_used", []),
+                       "rejection": (rv.get("rejection_text") or "").replace("**", ""), "lessons_used": d.get("lessons_used", []),
                        "knobs": {k: getattr(plan, k) for k in ["it_mw", "cooling_type", "cooling_noise", "cooling_barrier", "generator_tier", "generator_screen",
                                                               "generator_enclosure", "bess_mw", "water_source"]},
                        "measured": {k: v for k, v in rv["measured"].items() if k in
@@ -218,7 +218,7 @@ footer{padding:14px 24px;color:var(--ink2);font-size:12px}
   <div id="rej" class="rej"></div>
  </div>
 </div>
-<div class="card" style="margin-top:16px"><div class="charttitle">Penalty per round (0 = permit approved)</div><svg id="chart" viewBox="0 0 800 230"></svg></div>
+<div class="card" style="margin-top:16px"><div class="charttitle">Penalty per round (0 = permit approved)</div><svg id="chart" viewBox="0 0 800 230"></svg><div class="legend" id="chartlegend" style="margin-top:6px"></div></div>
 </main>
 <footer>Sources: NJOGIS Parcels and MOD-IV Composite; NJDEP Land Use/Land Cover 2020 wetlands. Noise propagation, buffers, setbacks, air and water thresholds are computed in code; the agents decide what to change.</footer>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
@@ -340,15 +340,18 @@ function play(){if(timer){clearInterval(timer);timer=null;return} idx=0; timer=s
 function chart(){
   const svg=document.getElementById('chart'); const W=800,H=230,px=50,py=22;
   const maxR=Math.max(...RUNS.map(r=>r.rounds.length)), maxP=Math.max(10,...RUNS.flatMap(r=>r.rounds.map(x=>x.penalty)));
-  const X=n=>px+(n-1)*(W-px-150)/Math.max(1,maxR-1), Y=p=>H-py-(p/maxP)*(H-2*py);
-  let s=`<line x1="${px}" y1="${Y(0)}" x2="${W-150}" y2="${Y(0)}" stroke="#a9aeb1"/><text x="10" y="${Y(0)+4}" fill="#565c65" font-size="11">0</text><text x="10" y="${Y(maxP)+4}" fill="#565c65" font-size="11">${maxP}</text>`;
+  const X=n=>px+(n-1)*(W-px-30)/Math.max(1,maxR-1), Y=p=>H-py-(p/maxP)*(H-2*py);
+  let s=`<line x1="${px}" y1="${Y(0)}" x2="${W-30}" y2="${Y(0)}" stroke="#a9aeb1"/><text x="10" y="${Y(0)+4}" fill="#565c65" font-size="11">0</text><text x="10" y="${Y(maxP)+4}" fill="#565c65" font-size="11">${maxP}</text>`;
   const cols=['#005ea2','#b50909','#2e8540','#c2850c'];
+  const isBase=r=>/nomem|no_mem|baseline/i.test(r.run_id);
+  let leg='';
   RUNS.forEach((r,i)=>{const pts=r.rounds.map(x=>`${X(x.round)},${Y(x.penalty)}`).join(' ');
-    s+=`<polyline points="${pts}" fill="none" stroke="${cols[i%4]}" stroke-width="2"/>`+r.rounds.map(x=>`<circle cx="${X(x.round)}" cy="${Y(x.penalty)}" r="4" fill="${cols[i%4]}" stroke="#fcfcfb" stroke-width="2"><title>${r.run_id} round ${x.round}: penalty ${x.penalty}</title></circle>`).join('')
-      +`<text x="${X(r.rounds.length)+8}" y="${Y(r.rounds[r.rounds.length-1].penalty)+4}" fill="#1b1b1b" font-size="12">${r.run_id} · ${r.rounds.length} rounds</text>`;
+    s+=`<polyline points="${pts}" fill="none" stroke="${cols[i%4]}" stroke-width="2" ${isBase(r)?'stroke-dasharray="7 5"':''}/>`+r.rounds.map(x=>`<circle cx="${X(x.round)}" cy="${Y(x.penalty)}" r="4" fill="${cols[i%4]}" stroke="#fcfcfb" stroke-width="2"><title>${r.run_id} round ${x.round}: penalty ${x.penalty}</title></circle>`).join('');
+    const last=r.rounds[r.rounds.length-1];
+    leg+=`<span><i class="sw" style="background:${cols[i%4]};border-color:${cols[i%4]}"></i>${r.run_id}${isBase(r)?' (memory off)':''} · ${r.site_id} · ${r.rounds.length} round${r.rounds.length>1?'s':''} · ${last.penalty===0?'approved':'penalty '+last.penalty}</span>`;
     if(r===cur){const x=r.rounds[idx-1];s+=`<circle cx="${X(x.round)}" cy="${Y(x.penalty)}" r="8" fill="none" stroke="#1b1b1b" stroke-width="2"/>`}});
   for(let n=1;n<=maxR;n++) s+=`<text x="${X(n)-3}" y="${H-4}" fill="#565c65" font-size="11">${n}</text>`;
-  svg.innerHTML=s;
+  svg.innerHTML=s; document.getElementById('chartlegend').innerHTML=leg;
 }
 init();
 </script></body></html>"""
