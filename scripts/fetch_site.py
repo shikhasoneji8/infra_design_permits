@@ -178,17 +178,31 @@ def main():
     ap.add_argument("--pin")
     ap.add_argument("--site-id")
     ap.add_argument("--name")
-    ap.add_argument("--all", action="store_true", help="fetch the two demo sites")
+    ap.add_argument("--all", action="store_true", help="fetch the demo sites for --state")
+    ap.add_argument("--catalog", action="store_true", help="fetch every vetted parcel in CATALOG (NJ and TX) not already on disk")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    jobs = (TX_DEMO_SITES if a.state == "tx" else DEMO_SITES) if a.all else [{"pin": a.pin, "site_id": a.site_id, "name": a.name or a.site_id}]
-    if not a.all and not (a.pin and a.site_id):
-        ap.error("--pin and --site-id, or --all")
+    if a.catalog:
+        jobs = [dict(c) for c in CATALOG if not (OUT / f"{c['site_id']}.json").exists()]
+        print(f"{len(jobs)} catalog parcels to fetch ({len(CATALOG) - len(jobs)} already on disk)")
+    else:
+        jobs = (TX_DEMO_SITES if a.state == "tx" else DEMO_SITES) if a.all else [{"pin": a.pin, "site_id": a.site_id, "name": a.name or a.site_id}]
+        if not a.all and not (a.pin and a.site_id):
+            ap.error("--pin and --site-id, --all, or --catalog")
+    failures = []
     for j in jobs:
-        b = fetch_tx(**j) if a.state == "tx" else fetch(**j)
+        state = j.pop("state", a.state)
+        try:
+            b = fetch_tx(**j) if state == "tx" else fetch(**j)
+        except Exception as e:  # noqa: BLE001
+            print(f"[{j['site_id']}] FAILED: {str(e)[:200]}")
+            failures.append(j["site_id"])
+            continue
         p = OUT / f"{j['site_id']}.json"
         p.write_text(json.dumps(b))
         print(f"[{j['site_id']}] wrote {p} ({p.stat().st_size // 1024} KB)")
+    if failures:
+        print("failed:", failures)
 
 
 if __name__ == "__main__":
