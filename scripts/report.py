@@ -24,19 +24,29 @@ COLORS = {"data_hall": "#005ea2", "generator": "#b50909", "cooling": "#0081a1", 
           "parking": "#8d9297", "stormwater_basin": "#2e8540"}
 
 
+def _poly_rings(geom) -> list[list[list[float]]]:
+    polys = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+    return [[[round(x, 1), round(y, 1)] for x, y in p.exterior.coords] for p in polys]
+
+
 def _poly_points(geom) -> list[str]:
     polys = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
     return [" ".join(f"{x:.1f},{-y:.1f}" for x, y in p.exterior.coords) for p in polys]
 
 
 def site_layers(site: Site) -> dict:
-    layers = {"parcel": _poly_points(site.parcel), "homes": [], "commercial": [], "wetlands": [], "buffers": []}
+    layers = {"parcel": _poly_points(site.parcel), "homes": [], "commercial": [], "wetlands": [], "buffers": [],
+              "rings": {"parcel": _poly_rings(site.parcel), "homes": [], "commercial": [], "wetlands": [], "buffers": []}}
     for n in site.neighbors:
-        (layers["homes"] if n.is_residential else layers["commercial"]).extend(_poly_points(n.geom))
+        key = "homes" if n.is_residential else "commercial"
+        layers[key].extend(_poly_points(n.geom))
+        layers["rings"][key].extend(_poly_rings(n.geom))
     for w in site.wetlands:
         layers["wetlands"].extend(_poly_points(w.geom))
+        layers["rings"]["wetlands"].extend(_poly_rings(w.geom))
         if w.buffer_m > 0:
             layers["buffers"].extend(_poly_points(w.geom.buffer(w.buffer_m)))
+            layers["rings"]["buffers"].extend(_poly_rings(w.geom.buffer(w.buffer_m)))
     minx, miny, maxx, maxy = site.parcel.buffer(260).bounds
     layers["viewbox"] = [minx, -maxy, maxx - minx, maxy - miny]
     return layers
@@ -55,7 +65,8 @@ def collect(store, run_id: str) -> dict:
         plan = Plan.model_validate(d["plan"])
         objs = []
         for o in plan.objects:
-            objs.append({"id": o.id, "kind": o.kind, "pts": _poly_points(o.footprint())[0]})
+            objs.append({"id": o.id, "kind": o.kind, "pts": _poly_points(o.footprint())[0],
+                         "x": o.x, "y": o.y, "w": o.w, "l": o.l, "h": o.h, "rot": o.rotation_deg})
         rounds.append({"round": n, "penalty": rv["penalty"], "passed": rv["passed"], "objects": objs,
                        "violations": [{"rule": v["rule"], "title": v["title"], "measured": v["measured"], "penalty": v["penalty"]}
                                       for v in rv["violations"]],
@@ -105,6 +116,8 @@ input[type=range]{width:100%;accent-color:var(--blue)}
 .sitename{font-size:13px;color:var(--ink2)}
 select{background:#fff;color:var(--ink);border:1px solid #565c65;border-radius:4px;padding:6px;font-size:14px;max-width:420px}
 .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+button.active{background:var(--blue-dark);box-shadow:inset 0 0 0 2px #fff,inset 0 0 0 4px var(--blue-dark)}
+#map3d canvas{display:block}
 #chart{width:100%;height:230px}
 .charttitle{font-size:15px;font-weight:600;margin-bottom:4px}
 footer{padding:14px 24px;color:var(--ink2);font-size:12px}
@@ -128,9 +141,14 @@ footer{padding:14px 24px;color:var(--ink2);font-size:12px}
    <select id="runsel"></select>
    <button onclick="play()">Play</button><button onclick="step(-1)">Prev</button><button onclick="step(1)">Next</button>
    <span id="rlabel" style="font-size:14px;color:var(--ink2)"></span>
+   <span style="margin-left:auto"><button id="b2d" onclick="setView('2d')">2D plan</button><button id="b3d" onclick="setView('3d')">3D</button></span>
   </div>
   <input type="range" id="slider" min="1" max="1" value="1" oninput="show(+this.value)">
   <svg id="map" class="map"></svg>
+  <div id="map3d" style="display:none;width:100%;height:560px;background:var(--surface);border:1px solid var(--line);position:relative">
+    <div id="lbl3d" style="position:absolute;left:10px;top:8px;font-size:15px;color:var(--ink);pointer-events:none"></div>
+    <div style="position:absolute;right:10px;bottom:8px;font-size:12px;color:var(--ink2);pointer-events:none">drag to orbit · scroll to zoom</div>
+  </div>
   <div class="legend" style="margin-top:8px">
    <span><i class="sw" style="background:#005ea2"></i>data hall</span><span><i class="sw" style="background:#b50909"></i>generators</span>
    <span><i class="sw" style="background:#0081a1"></i>cooling</span><span><i class="sw" style="background:#c2850c"></i>substation</span>
@@ -150,13 +168,78 @@ footer{padding:14px 24px;color:var(--ink2);font-size:12px}
 <div class="card" style="margin-top:16px"><div class="charttitle">Penalty per round (0 = permit approved)</div><svg id="chart" viewBox="0 0 800 230"></svg></div>
 </main>
 <footer>Sources: NJOGIS Parcels and MOD-IV Composite; NJDEP Land Use/Land Cover 2020 wetlands. Noise propagation, buffers, setbacks, air and water thresholds are computed in code; the agents decide what to change.</footer>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const V = {ready:false, scene:null, cam:null, renderer:null, controls:null, objGroup:null, siteGroup:null, meshes:{}, targets:{}, layers:null};
+function shapeFrom(ring){ const sh=new THREE.Shape(); ring.forEach((p,i)=> i? sh.lineTo(p[0],p[1]) : sh.moveTo(p[0],p[1])); return sh; }
+function flat(ring, color, z, opacity=1){ const g=new THREE.ShapeGeometry(shapeFrom(ring)); const m=new THREE.MeshLambertMaterial({color, transparent:opacity<1, opacity, side:THREE.DoubleSide}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; mesh.position.y=z; return mesh; }
+function extrude(ring, color, h, z=0){ const g=new THREE.ExtrudeGeometry(shapeFrom(ring),{depth:h,bevelEnabled:false}); const m=new THREE.MeshLambertMaterial({color}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; mesh.position.y=z; return mesh; }
+function outline(ring, color, z, dashed){ const pts=ring.map(p=>new THREE.Vector3(p[0],z,-p[1])); const g=new THREE.BufferGeometry().setFromPoints(pts); const m= dashed? new THREE.LineDashedMaterial({color,dashSize:6,gapSize:4}) : new THREE.LineBasicMaterial({color}); const l=new THREE.Line(g,m); if(dashed) l.computeLineDistances(); return l; }
+window.init3d = function(layers){
+  const box=document.getElementById('map3d');
+  if(!V.ready){
+    V.renderer=new THREE.WebGLRenderer({antialias:true}); V.renderer.setPixelRatio(window.devicePixelRatio||1);
+    V.renderer.setSize(box.clientWidth, box.clientHeight); V.renderer.setClearColor(0xfcfcfb); box.appendChild(V.renderer.domElement);
+    V.scene=new THREE.Scene();
+    V.cam=new THREE.PerspectiveCamera(45, box.clientWidth/box.clientHeight, 1, 5000);
+    V.controls=new OrbitControls(V.cam, V.renderer.domElement); V.controls.maxPolarAngle=Math.PI/2.05; V.controls.enableDamping=true;
+    V.scene.add(new THREE.HemisphereLight(0xffffff,0x9a9a9a,0.9));
+    const sun=new THREE.DirectionalLight(0xffffff,0.9); sun.position.set(300,500,200); V.scene.add(sun);
+    V.objGroup=new THREE.Group(); V.scene.add(V.objGroup);
+    V.ready=true;
+    const animate=()=>{ requestAnimationFrame(animate);
+      for(const id in V.meshes){ const m=V.meshes[id], t=V.targets[id]; if(!t) continue; m.position.x+= (t.x-m.position.x)*0.08; m.position.z+= (t.z-m.position.z)*0.08; m.rotation.y+= (t.ry-m.rotation.y)*0.08; }
+      V.controls.update(); V.renderer.render(V.scene,V.cam); };
+    animate();
+    window.addEventListener('resize',()=>{ if(box.style.display==='none') return; V.renderer.setSize(box.clientWidth, box.clientHeight); V.cam.aspect=box.clientWidth/box.clientHeight; V.cam.updateProjectionMatrix(); });
+  }
+  if(V.layers!==layers){
+    if(V.siteGroup) V.scene.remove(V.siteGroup);
+    V.siteGroup=new THREE.Group(); V.layers=layers; const R=layers.rings;
+    const vb=layers.viewbox; const cx=vb[0]+vb[2]/2, cz=-(vb[1]+vb[3]/2);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(vb[2]*1.6, vb[3]*1.6), new THREE.MeshLambertMaterial({color:0xf3f4f5})); ground.rotation.x=-Math.PI/2; ground.position.set(cx,-0.3,-(vb[1]+vb[3]/2)*-1*-1); ground.position.z=-( -vb[1]-vb[3]/2 ); V.siteGroup.add(ground);
+    R.parcel.forEach(r=>{ V.siteGroup.add(flat(r,0xf5f1e6,0)); V.siteGroup.add(outline(r,0x565c65,0.4,false)); });
+    R.commercial.forEach(r=>V.siteGroup.add(extrude(r,0xd9d9d9,4)));
+    R.homes.forEach(r=>V.siteGroup.add(extrude(r,0xe8c9a0,7)));
+    R.wetlands.forEach(r=>V.siteGroup.add(flat(r,0x9bd4c9,0.2)));
+    R.buffers.forEach(r=>V.siteGroup.add(outline(r,0x168a7a,0.6,true)));
+    V.scene.add(V.siteGroup);
+    const d=Math.max(vb[2],vb[3]); V.cam.position.set(cx+d*0.35, d*0.45, -( -vb[1]-vb[3]/2 )+d*0.5); V.controls.target.set(cx,0,-( -vb[1]-vb[3]/2 )); V.controls.update();
+    for(const id in V.meshes){ V.objGroup.remove(V.meshes[id]); } V.meshes={}; V.targets={};
+  }
+};
+window.show3d = function(objects, colors, label){
+  document.getElementById('lbl3d').textContent=label;
+  const seen=new Set();
+  objects.forEach(o=>{ seen.add(o.id);
+    const h=Math.max(o.h, o.kind==='parking'?0.4:(o.kind==='stormwater_basin'?0.6:1));
+    let m=V.meshes[o.id];
+    if(!m || m.userData.w!==o.w || m.userData.l!==o.l){
+      if(m) V.objGroup.remove(m);
+      const color = o.kind==='parking'?0x8d9297:parseInt(colors[o.kind].slice(1),16);
+      m=new THREE.Mesh(new THREE.BoxGeometry(o.w,h,o.l), new THREE.MeshLambertMaterial({color, transparent:o.kind==='stormwater_basin', opacity:o.kind==='stormwater_basin'?0.7:1}));
+      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({color:0x1b1b1b})));
+      m.userData={w:o.w,l:o.l}; m.position.set(o.x,h/2,-o.y); m.rotation.y=-o.rot*Math.PI/180; V.objGroup.add(m); V.meshes[o.id]=m;
+    }
+    m.position.y=h/2; V.targets[o.id]={x:o.x,z:-o.y,ry:-o.rot*Math.PI/180};
+  });
+  for(const id in V.meshes){ if(!seen.has(id)){ V.objGroup.remove(V.meshes[id]); delete V.meshes[id]; delete V.targets[id]; } }
+};
+</script>
 <script>
 const RUNS = __DATA__;
+let VIEW='2d';
+function setView(v){ VIEW=v; document.getElementById('map').style.display= v==='2d'?'':'none'; document.getElementById('map3d').style.display= v==='3d'?'':'none';
+  document.getElementById('b2d').classList.toggle('active',v==='2d'); document.getElementById('b3d').classList.toggle('active',v==='3d');
+  if(v==='3d'){ try{ window.init3d(cur.layers); window.dispatchEvent(new Event('resize')); show(idx);}catch(e){ console.error(e); alert('3D needs WebGL and internet access for three.js'); setView('2d'); } } }
 const COLORS = __COLORS__;
 let cur = RUNS[0], idx = 1, timer = null;
 const sel = document.getElementById('runsel');
 RUNS.forEach((r,i)=>{const o=document.createElement('option');o.value=i;o.textContent=r.run_id+' : '+r.site_name;sel.appendChild(o)});
 sel.onchange=()=>{cur=RUNS[+sel.value];idx=1;init()};
+document.getElementById('b2d').classList.add('active');
 function init(){document.getElementById('slider').max=cur.rounds.length;show(1);chart()}
 function polys(list,cls){return list.map(p=>`<polygon class="${cls}" points="${p}"/>`).join('')}
 function objFill(o){return o.kind==='parking' ? 'url(#hatch)' : COLORS[o.kind]}
@@ -170,6 +253,7 @@ function show(i){
     + R.objects.map(o=>`<polygon class="obj" points="${o.pts}" fill="${objFill(o)}"><title>${o.id}</title></polygon>`).join('')
     + `<text class="maplabel" x="${L.viewbox[0]+8}" y="${L.viewbox[1]+22}">N ↑   round ${R.round}   penalty ${R.penalty}</text>`;
   document.getElementById('rlabel').textContent=`round ${R.round} of ${cur.rounds.length}`;
+  if(VIEW==='3d' && window.show3d){ window.init3d(L); window.show3d(R.objects, COLORS, `round ${R.round}   penalty ${R.penalty}`); }
   document.getElementById('site').textContent=cur.site_name+'  ('+cur.site_id+')';
   const pen=document.getElementById('pen'); pen.textContent=(R.passed?'PERMIT APPROVED · penalty ':'PERMIT DENIED · penalty ')+R.penalty; pen.className='pen '+(R.passed?'pass':'fail');
   const k=R.knobs; document.getElementById('knobs').textContent=`${k.it_mw} MW IT · cooling ${k.cooling_type}/${k.cooling_noise}${k.cooling_barrier?'+barrier':''} · gensets ${k.generator_tier}/${k.generator_enclosure} · BESS ${k.bess_mw} MW · water ${k.water_source}`;
