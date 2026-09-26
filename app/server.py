@@ -38,6 +38,17 @@ DATA = ROOT / "data" / "sites"
 OFFLINE = os.getenv("PH_OFFLINE", "") not in {"", "0", "false"}
 
 app = FastAPI(title="Grudge")
+
+
+@app.on_event("startup")
+def _warm():
+    def go():
+        try:
+            for d in api_sites():
+                pass
+        except Exception as e:  # noqa: BLE001
+            print("warm-up skipped:", e)
+    threading.Thread(target=go, daemon=True).start()
 _store = None
 _jobs: dict[str, dict] = {}  # run_id -> {status, error, started}
 _lock = threading.Lock()
@@ -81,6 +92,33 @@ def api_config():
 
 
 # ------------------------------------------------------------------ sites ----
+_site_cache: dict[str, dict] = {}  # site_id -> summary (sites never change once loaded)
+_layers_cache: dict[str, dict] = {}
+
+
+def _site_summary(doc: dict) -> dict:
+    """Cheap summary straight from the stored document; the geometry-heavy fields are cached per site."""
+    sid = doc["_id"]
+    if sid in _site_cache:
+        return _site_cache[sid]
+    neighbors = doc.get("neighbors", [])
+    homes = sum(1 for n in neighbors if str(n.get("prop_class", "")).startswith("2"))
+    out = {"site_id": sid, "name": doc.get("name"), "pin": doc.get("pin"), "municipality": doc.get("municipality"),
+           "state": doc.get("state", "NJ"), "rulebook": C.profile(doc.get("state", "NJ"))["name"],
+           "acres": round(float(doc.get("acres") or 0), 1), "homes": homes, "wetlands": len(doc.get("wetlands", [])),
+           "buildable_acres": None}
+    try:
+        site = site_from_doc(doc)
+        out["acres"] = round(site.acres, 1)
+        out["homes"] = len(site.homes)
+        out["buildable_acres"] = site.summary_for_llm()["buildable_area_acres"]
+        _layers_cache.setdefault(sid, site_layers(site))
+    except Exception as e:  # noqa: BLE001
+        out["error"] = str(e)[:120]
+    _site_cache[sid] = out
+    return out
+
+
 @app.get("/api/sites")
 def api_sites():
     s = store()
@@ -88,24 +126,19 @@ def api_sites():
         docs = list(s.sites.values())
     else:
         from permit_harness import db
-        docs = list(db.db().sites.find({}, {"neighbors": 0, "wetlands": 0}))
-    out = []
-    for d in docs:
-        full = s.get_site(d["_id"])
-        site = site_from_doc(full)
-        out.append({"site_id": d["_id"], "name": d.get("name"), "pin": d.get("pin"), "municipality": d.get("municipality"),
-                    "state": d.get("state", "NJ"), "rulebook": site.profile["name"],
-                    "acres": round(site.acres, 1), "homes": len(site.homes), "wetlands": len(site.wetlands),
-                    "buildable_acres": site.summary_for_llm()["buildable_area_acres"]})
-    return out
+        docs = list(db.db().sites.find({}))
+    return [_site_summary(d) for d in docs]
 
 
 @app.get("/api/sites/{site_id}/layers")
 def api_site_layers(site_id: str):
+    if site_id in _layers_cache:
+        return _layers_cache[site_id]
     doc = store().get_site(site_id)
     if not doc:
         raise HTTPException(404, "site not found")
-    return site_layers(site_from_doc(doc))
+    _layers_cache[site_id] = site_layers(site_from_doc(doc))
+    return _layers_cache[site_id]
 
 
 class NewSite(BaseModel):
@@ -164,6 +197,7 @@ def api_add_site(body: NewSite):
     bundle = json.loads((DATA / f"{site_id}.json").read_text())
     doc = site_doc_from_geojson_bundle(bundle)
     db.upsert_site(doc)
+    _site_cache.pop(site_id, None); _layers_cache.pop(site_id, None)
     site = site_from_doc(doc)
     return {"site_id": site_id, "name": name, "acres": round(site.acres, 1), "homes": len(site.homes),
             "wetlands": len(site.wetlands), "log": r.stdout[-800:]}
