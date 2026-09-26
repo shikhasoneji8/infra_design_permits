@@ -18,7 +18,7 @@ button.active{background:var(--blue-dark);box-shadow:inset 0 0 0 2px #fff,inset 
 button.cmp{font-size:11px;padding:2px 7px;margin:0}button.cmp.on{background:var(--blue);color:#fff}
 button.danger{background:var(--red)} button.ok{background:var(--green)} button:disabled{opacity:.5;cursor:default}
 input,select{background:#fff;color:var(--ink);border:1px solid #565c65;border-radius:4px;padding:6px 8px;font-size:13px;width:100%;margin-bottom:6px}
-label{font-size:12px;color:var(--ink2);display:block}
+label{font-size:12px;color:var(--ink2);display:block}label[title]{cursor:help}
 .row{display:flex;gap:6px}.row>*{flex:1}
 .site{padding:8px;border:1px solid var(--line);border-left:4px solid var(--blue);margin-bottom:6px;cursor:pointer;font-size:13px}
 .site.sel{background:#e7f6f8}.site small{color:var(--ink2);display:block}
@@ -69,34 +69,34 @@ svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
 <header><div><h1>Permit Harness</h1><div class="sub">An AI designer that redesigns a data center until the permit review passes. Real parcels, real rules, memory in MongoDB Atlas.</div></div><div class="status"><span id="hdrspin" style="display:none"><i class="spin w"></i>working…</span> <span id="hdrstatus" title="connection"></span></div></header>
 <main>
  <div class="left">
+  <div class="card"><h2>New run</h2><div style="font-size:12.5px;color:var(--ink2);margin-bottom:6px">Hover any label for what it means. Start run is enough for a first try.</div>
+   <label title="The parcel to design on. Add more parcels in the Sites card below.">site ⓘ</label><select id="runsite" title="The parcel to design on"></select>
+   <div class="row"><div><label title="A name for this run so you can find it in Atlas and on the chart. Leave blank for an automatic id. Reuse a name only with Resume.">run id ⓘ</label><input id="runid" placeholder="auto"></div><div><label title="Stop after this many design-review rounds if the permit still has not passed.">max rounds ⓘ</label><input id="maxr" type="number" value="12"></div></div>
+   <div class="row"><div><label title="On: before each round the designer recalls lessons from past rejections in Atlas (Vector Search). Off: same harness with no recall, the baseline for the A/B chart.">memory ⓘ</label><select id="mem"><option value="1">on (recall from Atlas)</option><option value="0">off (baseline)</option></select></div><div><label title="Kill the process on purpose after this round to demonstrate resume-from-checkpoint. The Resume button then continues from Atlas.">crash after round ⓘ</label><input id="crash" type="number" placeholder="none"></div></div>
+   <label title="Instant: deterministic designer and templated reviewer, about a second per round, for walkthroughs. Fast: Haiku designs, templated letter, 10 to 15 s. Quality: Sonnet designs and writes the letter, about a minute per round; the mode behind the numbers in the write-up.">speed ⓘ</label><select id="speed"><option value="instant">instant: deterministic designer + templated reviewer, ~1 s per round (walkthroughs)</option><option value="fast">fast: Haiku designer, templated reviewer, ~10-15 s per round</option><option value="quality">quality: Sonnet designer and reviewer, ~60 s per round (the numbers in the write-up)</option></select>
+   <button onclick="startRun()" title="Run until the permit passes or max rounds is reached">Start run</button><button class="sec" onclick="startRun(true)" title="Same, but the process dies after the round set above (default 3) so you can press Resume">Start with crash</button>
+   <div id="runerr" class="err"></div>
+  </div>
   <div class="card"><h2>Sites</h2><div id="sites"></div>
    <details open><summary style="cursor:pointer;font-size:13px;color:var(--blue)">Add a real parcel (NJ or Texas)</summary>
     <div style="margin-top:6px">
-    <label>pick a vetted parcel</label><div class="row"><select id="catalog"></select><button onclick="addFromCatalog()" style="flex:0 0 auto">Add</button></div>
-    <label>or search by street address</label>
+    <label title="Real parcels we checked today: homes and wetlands close enough that the rules bite. Add fetches it from the state GIS and loads it into Atlas.">pick a vetted parcel ⓘ</label><div class="row"><select id="catalog"></select><button onclick="addFromCatalog()" style="flex:0 0 auto">Add</button></div>
+    <label title="Type part of a street name (NJ: add a comma and the town). Lists parcels of 5+ acres; Add loads one.">or search by street address ⓘ</label>
     <div class="row"><select id="state" style="flex:0 0 100px"><option value="nj">New Jersey</option><option value="tx">Texas (Travis)</option></select><input id="addr" placeholder="e.g. Dey Rd, Wayne  or  Decker Lake"><button onclick="lookup()" style="flex:0 0 auto">Search</button></div>
     <div id="lookup"></div>
     <div id="addlog" class="log" style="display:none"></div></div>
    </details>
   </div>
-  <div class="card"><h2>New run</h2>
-   <label>site</label><select id="runsite"></select>
-   <div class="row"><div><label>run id</label><input id="runid" placeholder="demo6"></div><div><label>max rounds</label><input id="maxr" type="number" value="12"></div></div>
-   <div class="row"><div><label>memory</label><select id="mem"><option value="1">on (recall from Atlas)</option><option value="0">off (baseline)</option></select></div><div><label>crash after round</label><input id="crash" type="number" placeholder="none"></div></div>
-   <label>speed</label><select id="speed"><option value="instant">instant: deterministic designer + templated reviewer, ~1 s per round (walkthroughs)</option><option value="fast">fast: Haiku designer, templated reviewer, ~10-15 s per round</option><option value="quality">quality: Sonnet designer and reviewer, ~60 s per round (the numbers in the write-up)</option></select>
-   <button onclick="startRun()">Start run</button><button class="sec" onclick="startRun(true)">Start with crash</button>
-   <div id="runerr" class="err"></div>
-  </div>
-  <div class="card"><h2>Runs</h2><label style="margin-bottom:6px"><input type="checkbox" id="hideold" onchange="loadRuns()" style="width:auto;margin:0 4px 0 0">hide runs that never passed (older harness versions)</label><div id="runs"></div></div>
+  <div class="card"><h2>Runs</h2><label style="margin-bottom:6px" title="Runs from earlier harness versions that never reached zero. Useful history, noisy for a demo."><input type="checkbox" id="hideold" onchange="loadRuns()" style="width:auto;margin:0 4px 0 0">hide runs that never passed (older harness versions)</label><div id="runs"></div></div>
  </div>
 
  <div class="center">
   <div class="card">
    <div class="toolbar">
     <span id="runtitle" style="font-weight:600"></span>
-    <span style="margin-left:auto"><button id="b2d" class="active" onclick="setView('2d')">2D plan</button><button id="b3d" onclick="setView('3d')">3D</button><button id="bsat" onclick="toggleSat()">Satellite</button></span>
+    <span style="margin-left:auto"><button id="b2d" class="active" onclick="setView('2d')" title="Top-down site plan">2D plan</button><button id="b3d" onclick="setView('3d')" title="Buildings with real heights; drag to orbit">3D</button><button id="bsat" onclick="toggleSat()" title="Aerial imagery under the plan (NJ 2020 orthophotos or Esri World Imagery)">Satellite</button></span>
    </div>
-   <div class="toolbar"><button onclick="play()">Play</button><button onclick="step(-1)">Prev</button><button onclick="step(1)">Next</button><span id="rlabel" style="color:var(--ink2)"></span>
+   <div class="toolbar"><button onclick="play()" title="Animate through the rounds">Play</button><button onclick="step(-1)" title="Previous round">Prev</button><button onclick="step(1)" title="Next round">Next</button><span id="rlabel" style="color:var(--ink2)"></span>
     <span style="margin-left:auto"><button id="bkill" style="display:none"></button><button id="bresume" class="ok" style="display:none" onclick="resumeRun()">Resume after crash</button></span></div>
    <div id="working" class="working" style="display:none"></div>
    <input type="range" id="slider" min="1" max="1" value="1" oninput="show(+this.value)" style="width:100%">
@@ -117,8 +117,8 @@ svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
   </div>
   <div class="card"><h2>MongoDB Atlas, live</h2>
    <table class="atlas" id="atlas"></table>
-   <div style="margin-top:8px"><label>ask the memory (Vector Search over lessons)</label><div class="row"><input id="askq" placeholder="generators too close to homes on the east"><button onclick="askMem()" style="flex:0 0 auto">Ask</button></div><div id="askout"></div></div>
-   <div style="margin-top:8px"><label>search past rejection letters (Atlas Search)</label><div class="row"><input id="askl" placeholder="wetland buffer"><button onclick="askLetters()" style="flex:0 0 auto">Search</button></div><div id="asklout"></div></div>
+   <div style="margin-top:8px"><label title="Plain-English question answered by Atlas Vector Search over the lessons the reviewer wrote after past rejections.">ask the memory (Vector Search over lessons) ⓘ</label><div class="row"><input id="askq" placeholder="generators too close to homes on the east"><button onclick="askMem()" style="flex:0 0 auto">Ask</button></div><div id="askout"></div></div>
+   <div style="margin-top:8px"><label title="Full-text search (Atlas Search) over every rejection letter the reviewer has written.">search past rejection letters (Atlas Search) ⓘ</label><div class="row"><input id="askl" placeholder="wetland buffer"><button onclick="askLetters()" style="flex:0 0 auto">Search</button></div><div id="asklout"></div></div>
   </div>
  </div>
 </main>
