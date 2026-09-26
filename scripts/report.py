@@ -49,6 +49,15 @@ def site_layers(site: Site) -> dict:
             layers["rings"]["buffers"].extend(_poly_rings(w.geom.buffer(w.buffer_m)))
     minx, miny, maxx, maxy = site.parcel.buffer(260).bounds
     layers["viewbox"] = [minx, -maxy, maxx - minx, maxy - miny]
+    ox, oy = site.origin_utm
+    w_px = 1400
+    h_px = int(w_px * (maxy - miny) / (maxx - minx))
+    bbox = f"{minx + ox},{miny + oy},{maxx + ox},{maxy + oy}"
+    # Esri World Imagery export in EPSG:32618 (UTM 18N): the same metric frame the plan uses, so no reprojection
+    layers["satellite"] = ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+                           f"?bbox={bbox}&bboxSR=32618&imageSR=32618&size={w_px},{h_px}&format=jpg&f=image")
+    layers["satellite_fallback"] = ("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
+                                    f"?bbox={bbox}&bboxSR=32618&imageSR=32618&size={w_px},{h_px}&format=jpg&f=image")
     return layers
 
 
@@ -101,6 +110,13 @@ svg.map{width:100%;height:auto;background:var(--surface);border:1px solid var(--
 .buf{fill:none;stroke:#168a7a;stroke-width:1;stroke-dasharray:6 4;opacity:.8}
 .obj{stroke:#1b1b1b;stroke-width:0.8;transition:all .6s ease}
 .maplabel{font-size:15px;fill:var(--ink)}
+svg.sat .parcel{fill:rgba(245,241,230,.15);stroke:#ffffff;stroke-width:2.5}
+svg.sat .home{fill:rgba(243,225,201,.25);stroke:#ffb366;stroke-width:1}
+svg.sat .comm{fill:rgba(230,230,230,.15);stroke:#dddddd}
+svg.sat .wet{fill:rgba(155,212,201,.45);stroke:#5ff0d8}
+svg.sat .buf{stroke:#5ff0d8;stroke-width:1.4}
+svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
+.attrib{font-size:11px;color:var(--ink2);margin-top:4px}
 .pen{font-size:40px;font-weight:700;line-height:1.1;margin:4px 0}.pass{color:var(--green)}.fail{color:var(--red)}
 .viol{font-size:13px;margin:6px 0;padding:6px 10px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--red)}
 .viol b{color:var(--red)}.viol span{color:var(--ink2)}
@@ -141,7 +157,7 @@ footer{padding:14px 24px;color:var(--ink2);font-size:12px}
    <select id="runsel"></select>
    <button onclick="play()">Play</button><button onclick="step(-1)">Prev</button><button onclick="step(1)">Next</button>
    <span id="rlabel" style="font-size:14px;color:var(--ink2)"></span>
-   <span style="margin-left:auto"><button id="b2d" onclick="setView('2d')">2D plan</button><button id="b3d" onclick="setView('3d')">3D</button></span>
+   <span style="margin-left:auto"><button id="b2d" onclick="setView('2d')">2D plan</button><button id="b3d" onclick="setView('3d')">3D</button><button id="bsat" onclick="toggleSat()">Satellite</button></span>
   </div>
   <input type="range" id="slider" min="1" max="1" value="1" oninput="show(+this.value)">
   <svg id="map" class="map"></svg>
@@ -149,6 +165,7 @@ footer{padding:14px 24px;color:var(--ink2);font-size:12px}
     <div id="lbl3d" style="position:absolute;left:10px;top:8px;font-size:15px;color:var(--ink);pointer-events:none"></div>
     <div style="position:absolute;right:10px;bottom:8px;font-size:12px;color:var(--ink2);pointer-events:none">drag to orbit · scroll to zoom</div>
   </div>
+  <div class="attrib" id="attrib"></div>
   <div class="legend" style="margin-top:8px">
    <span><i class="sw" style="background:#005ea2"></i>data hall</span><span><i class="sw" style="background:#b50909"></i>generators</span>
    <span><i class="sw" style="background:#0081a1"></i>cooling</span><span><i class="sw" style="background:#c2850c"></i>substation</span>
@@ -199,8 +216,11 @@ window.init3d = function(layers){
     if(V.siteGroup) V.scene.remove(V.siteGroup);
     V.siteGroup=new THREE.Group(); V.layers=layers; const R=layers.rings;
     const vb=layers.viewbox; const cx=vb[0]+vb[2]/2, cz=-(vb[1]+vb[3]/2);
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(vb[2]*1.6, vb[3]*1.6), new THREE.MeshLambertMaterial({color:0xf3f4f5})); ground.rotation.x=-Math.PI/2; ground.position.set(cx,-0.3,-(vb[1]+vb[3]/2)*-1*-1); ground.position.z=-( -vb[1]-vb[3]/2 ); V.siteGroup.add(ground);
-    R.parcel.forEach(r=>{ V.siteGroup.add(flat(r,0xf5f1e6,0)); V.siteGroup.add(outline(r,0x565c65,0.4,false)); });
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(vb[2]*1.6, vb[3]*1.6), new THREE.MeshLambertMaterial({color:0xf3f4f5})); ground.rotation.x=-Math.PI/2; ground.position.set(cx,-0.5,-( -vb[1]-vb[3]/2 )); V.siteGroup.add(ground);
+    // satellite plane exactly over the 2D viewbox extent (same UTM frame as the export request)
+    const sat=new THREE.Mesh(new THREE.PlaneGeometry(vb[2], vb[3]), new THREE.MeshLambertMaterial({color:0xffffff})); sat.rotation.x=-Math.PI/2; sat.position.set(cx,-0.2,-( -vb[1]-vb[3]/2 )); sat.visible=false; V.siteGroup.add(sat); V.sat=sat; V.satUrl=null;
+    V.parcelMeshes=[];
+    R.parcel.forEach(r=>{ const pm=flat(r,0xf5f1e6,0); V.parcelMeshes.push(pm); V.siteGroup.add(pm); V.siteGroup.add(outline(r,0x565c65,0.4,false)); });
     R.commercial.forEach(r=>V.siteGroup.add(extrude(r,0xd9d9d9,4)));
     R.homes.forEach(r=>V.siteGroup.add(extrude(r,0xe8c9a0,7)));
     R.wetlands.forEach(r=>V.siteGroup.add(flat(r,0x9bd4c9,0.2)));
@@ -208,7 +228,18 @@ window.init3d = function(layers){
     V.scene.add(V.siteGroup);
     const d=Math.max(vb[2],vb[3]); V.cam.position.set(cx+d*0.35, d*0.45, -( -vb[1]-vb[3]/2 )+d*0.5); V.controls.target.set(cx,0,-( -vb[1]-vb[3]/2 )); V.controls.update();
     for(const id in V.meshes){ V.objGroup.remove(V.meshes[id]); } V.meshes={}; V.targets={};
+    V.satUrl=null;
   }
+};
+window.setSat3d = function(on, layers){
+  if(!V.ready) return;
+  if(on && V.satUrl!==layers.satellite){
+    const loader=new THREE.TextureLoader(); loader.setCrossOrigin('anonymous');
+    const apply=(tex)=>{ tex.colorSpace=THREE.SRGBColorSpace; V.sat.material=new THREE.MeshLambertMaterial({map:tex}); V.sat.material.needsUpdate=true; };
+    loader.load(layers.satellite, apply, undefined, ()=>loader.load(layers.satellite_fallback, apply));
+    V.satUrl=layers.satellite;
+  }
+  V.sat.visible=on; V.parcelMeshes.forEach(m=>{ m.material.transparent=true; m.material.opacity= on?0.15:1; m.material.needsUpdate=true; });
 };
 window.show3d = function(objects, colors, label){
   document.getElementById('lbl3d').textContent=label;
@@ -230,10 +261,11 @@ window.show3d = function(objects, colors, label){
 </script>
 <script>
 const RUNS = __DATA__;
-let VIEW='2d';
+let VIEW='2d'; let SAT=false;
+function toggleSat(){ SAT=!SAT; document.getElementById('bsat').classList.toggle('active',SAT); if(window.setSat3d) window.setSat3d(SAT, cur.layers); show(idx); }
 function setView(v){ VIEW=v; document.getElementById('map').style.display= v==='2d'?'':'none'; document.getElementById('map3d').style.display= v==='3d'?'':'none';
   document.getElementById('b2d').classList.toggle('active',v==='2d'); document.getElementById('b3d').classList.toggle('active',v==='3d');
-  if(v==='3d'){ try{ window.init3d(cur.layers); window.dispatchEvent(new Event('resize')); show(idx);}catch(e){ console.error(e); alert('3D needs WebGL and internet access for three.js'); setView('2d'); } } }
+  if(v==='3d'){ try{ window.init3d(cur.layers); window.dispatchEvent(new Event('resize')); if(window.setSat3d) window.setSat3d(SAT, cur.layers); show(idx);}catch(e){ console.error(e); alert('3D needs WebGL and internet access for three.js'); setView('2d'); } } }
 const COLORS = __COLORS__;
 let cur = RUNS[0], idx = 1, timer = null;
 const sel = document.getElementById('runsel');
@@ -248,7 +280,10 @@ function show(i){
   const L=cur.layers, R=cur.rounds[i-1];
   const svg=document.getElementById('map');
   svg.setAttribute('viewBox',L.viewbox.join(' '));
-  svg.innerHTML = `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fff"/><rect width="3" height="6" fill="#8d9297"/></pattern></defs>`
+  svg.classList.toggle('sat', SAT);
+  const satImg = SAT ? `<image href="${L.satellite}" x="${L.viewbox[0]}" y="${L.viewbox[1]}" width="${L.viewbox[2]}" height="${L.viewbox[3]}" preserveAspectRatio="none" onerror="this.setAttribute('href','${L.satellite_fallback}')"/>` : '';
+  document.getElementById('attrib').textContent = SAT ? 'Imagery: Esri World Imagery (Maxar, Earthstar Geographics, USDA, USGS, AeroGRID, IGN, GIS User Community); USGS National Map fallback. Parcels: NJOGIS. Wetlands: NJDEP 2020.' : '';
+  svg.innerHTML = satImg + `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fff"/><rect width="3" height="6" fill="#8d9297"/></pattern></defs>`
     + polys(L.parcel,'parcel')+polys(L.commercial,'comm')+polys(L.homes,'home')+polys(L.wetlands,'wet')+polys(L.buffers,'buf')
     + R.objects.map(o=>`<polygon class="obj" points="${o.pts}" fill="${objFill(o)}"><title>${o.id}</title></polygon>`).join('')
     + `<text class="maplabel" x="${L.viewbox[0]+8}" y="${L.viewbox[1]+22}">N ↑   round ${R.round}   penalty ${R.penalty}</text>`;
