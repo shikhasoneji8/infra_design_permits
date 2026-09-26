@@ -222,17 +222,36 @@ def save_lessons(run_id: str, site_id: str, round_no: int, lessons: list[dict]) 
     d.lessons.insert_many([{**l, "run_id": run_id, "site_id": site_id, "round": round_no, "created_at": now()} for l in lessons])
 
 
+_LESSON_FIELDS = {"text": 1, "rule": 1, "site_id": 1, "run_id": 1, "round": 1, "created_at": 1, "context": 1}
+
+
+def diversify(res: list[dict], k: int, per_rule: int = 2, exclude_site: str | None = None) -> list[dict]:
+    """Instant-mode runs write templated lessons, so raw nearest-neighbours are near-duplicates.
+    Keep the best-scoring copy of each distinct sentence, at most `per_rule` per rule."""
+    seen_text, per_rule_n, out = set(), {}, []
+    for r in res:
+        if exclude_site and r.get("site_id") == exclude_site:
+            continue
+        key = " ".join((r.get("text") or "").lower().split())[:120]
+        rule = r.get("rule") or "?"
+        if not key or key in seen_text or per_rule_n.get(rule, 0) >= per_rule:
+            continue
+        seen_text.add(key)
+        per_rule_n[rule] = per_rule_n.get(rule, 0) + 1
+        out.append(r)
+        if len(out) >= k:
+            break
+    return out
+
+
 def similar_lessons_text(query_text: str, k: int = 6, exclude_site: str | None = None) -> list[dict]:
     """$vectorSearch with a plain-text query; Atlas embeds the query with the same Voyage model."""
     d = db()
     if C.ATLAS_AUTO_EMBED and index_ready(d.lessons, LESSONS_AUTO_INDEX):
         pipe = [{"$vectorSearch": {"index": LESSONS_AUTO_INDEX, "path": "text", "query": query_text,
-                                   "numCandidates": max(100, k * 20), "limit": k * 2}},
-                {"$project": {"text": 1, "rule": 1, "site_id": 1, "context": 1, "score": {"$meta": "vectorSearchScore"}}}]
-        res = list(d.lessons.aggregate(pipe))
-        if exclude_site:
-            res = [r for r in res if r.get("site_id") != exclude_site]
-        return res[:k]
+                                   "numCandidates": max(200, k * 40), "limit": k * 8}},
+                {"$project": {**_LESSON_FIELDS, "score": {"$meta": "vectorSearchScore"}}}]
+        return diversify(list(d.lessons.aggregate(pipe)), k, exclude_site=exclude_site)
     from .llm import embed
     return similar_lessons(embed([query_text])[0], k, exclude_site)
 
@@ -242,14 +261,11 @@ def similar_lessons(query_embedding: list[float], k: int = 6, exclude_site: str 
     d = db()
     if index_ready(d.lessons, LESSONS_VECTOR_INDEX):
         pipe = [{"$vectorSearch": {"index": LESSONS_VECTOR_INDEX, "path": "embedding", "queryVector": query_embedding,
-                                   "numCandidates": max(50, k * 10), "limit": k * 2}},
-                {"$project": {"text": 1, "rule": 1, "site_id": 1, "context": 1, "score": {"$meta": "vectorSearchScore"}}}]
-        res = list(d.lessons.aggregate(pipe))
-        if exclude_site:
-            res = [r for r in res if r.get("site_id") != exclude_site]
-        return res[:k]
+                                   "numCandidates": max(200, k * 40), "limit": k * 8}},
+                {"$project": {**_LESSON_FIELDS, "score": {"$meta": "vectorSearchScore"}}}]
+        return diversify(list(d.lessons.aggregate(pipe)), k, exclude_site=exclude_site)
     q = {"site_id": {"$ne": exclude_site}} if exclude_site else {}
-    return list(d.lessons.find(q, {"text": 1, "rule": 1, "site_id": 1, "context": 1}).sort("created_at", DESCENDING).limit(k))
+    return diversify(list(d.lessons.find(q, _LESSON_FIELDS).sort("created_at", DESCENDING).limit(k * 8)), k)
 
 
 # -------------------------------------------------------- Atlas Search ----

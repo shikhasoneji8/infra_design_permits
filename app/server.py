@@ -314,7 +314,8 @@ def api_ask_lessons(body: Ask):
         res = s.similar_lessons(embed([body.q])[0], k=6)
     else:
         res = s.similar_lessons_text(body.q, k=6)
-    return [{"rule": r.get("rule"), "text": r.get("text"), "site_id": r.get("site_id"), "score": r.get("score")} for r in res]
+    return [{"rule": r.get("rule"), "text": r.get("text"), "site_id": r.get("site_id"), "run_id": r.get("run_id"),
+             "round": r.get("round"), "created_at": _jsonable(r.get("created_at")), "score": r.get("score")} for r in res]
 
 
 @app.post("/api/atlas/letters")
