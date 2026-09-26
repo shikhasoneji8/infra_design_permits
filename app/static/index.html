@@ -4,10 +4,11 @@
 *{box-sizing:border-box}
 body{font-family:"Public Sans","Source Sans Pro",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);margin:0;font-size:14px;line-height:1.4}
 .gov{background:var(--blue-dark);color:#fff;padding:5px 20px;font-size:12px}
-header{background:var(--blue);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px}
-header h1{font-size:20px;margin:0}header .sub{opacity:.9;font-size:13px}
-header .status{margin-left:auto;font-size:12px;opacity:.95}
-main{padding:14px 20px;display:grid;grid-template-columns:330px minmax(0,1fr) 440px;gap:14px}
+header{background:linear-gradient(90deg,var(--blue-dark),var(--blue));color:#fff;padding:18px 24px;display:flex;align-items:center;gap:16px}
+header h1{font-size:26px;margin:0;letter-spacing:.01em}header .sub{opacity:.92;font-size:15px;margin-top:3px}
+header .status{margin-left:auto;font-size:12px;opacity:.85;text-align:right}
+.gov{display:none}
+main{padding:14px 20px;display:grid;grid-template-columns:330px minmax(0,1fr) 480px;gap:14px}
 @media(max-width:1200px){main{grid-template-columns:300px minmax(0,1fr)} .right{grid-column:1/-1}}
 .card{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--blue);padding:12px 14px;margin-bottom:14px}
 .card h2{font-size:14px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
@@ -38,20 +39,22 @@ svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
 #map3d{display:none;width:100%;height:560px;background:var(--surface);border:1px solid var(--line);position:relative}#map3d canvas{display:block}
 .attrib{font-size:11px;color:var(--ink2);margin-top:4px}.legend span{display:inline-block;margin-right:10px;font-size:12px;color:var(--ink2)}
 .sw{display:inline-block;width:11px;height:11px;vertical-align:middle;margin-right:4px;border:1px solid #1b1b1b}
-.pen-big{font-size:34px;font-weight:700;line-height:1.1;margin:4px 0}.pass{color:var(--green)}.fail{color:var(--red)}
-.viol{font-size:13px;margin:6px 0;padding:6px 10px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--red)}
-.viol b{color:var(--red)}.viol span{color:var(--ink2)}.viol.ok{border-left-color:var(--green)}.viol .cite{font-size:11px;color:var(--ink2)}
-.lesson{font-size:12.5px;margin:4px 0;padding:5px 10px;background:#eaf5ea;border-left:4px solid var(--green)}
-.blockhead{font-size:12.5px;font-weight:700;margin:10px 0 2px}.blockhead span{font-weight:400;color:var(--ink2);display:block}
+.pen-big{font-size:36px;font-weight:700;line-height:1.1;margin:6px 0}.pass{color:var(--green)}.fail{color:var(--red)}
+.viol{font-size:15px;margin:8px 0;padding:8px 12px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--red);line-height:1.4}
+.viol b{color:var(--red)}.viol span{color:var(--ink2)}.viol.ok{border-left-color:var(--green)}.viol .cite{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.lesson{font-size:14.5px;margin:6px 0;padding:7px 12px;background:#eaf5ea;border-left:4px solid var(--green);line-height:1.4}
+.blockhead{font-size:15px;font-weight:700;margin:12px 0 4px}.blockhead span{font-weight:400;color:var(--ink2);display:block;font-size:13.5px}
 .axis{font-size:11px;fill:#565c65}
-.rej{font-size:12.5px;white-space:pre-wrap;max-height:220px;overflow:auto;margin-top:8px;padding:8px 10px;background:#f9f9f9;border:1px solid var(--line);font-family:Georgia,"Times New Roman",serif}
-.knobs{font-size:12px;color:var(--ink2);margin:4px 0 8px}.meas{font-size:12px;color:var(--ink2);margin-bottom:6px}
+.rej{font-size:14.5px;white-space:pre-wrap;max-height:260px;overflow:auto;margin-top:10px;padding:10px 12px;background:#f9f9f9;border:1px solid var(--line);font-family:Georgia,"Times New Roman",serif;line-height:1.5}
+.knobs{font-size:14px;color:var(--ink2);margin:4px 0 8px;line-height:1.4}.meas{font-size:14px;color:var(--ink2);margin-bottom:8px;line-height:1.4}
 #chart{width:100%;height:220px}
-.atlas td{padding:2px 8px 2px 0;font-size:12.5px}.atlas td.n{text-align:right;font-family:ui-monospace,Menlo,monospace}
-.mem{font-size:12.5px;padding:4px 8px;border-left:3px solid var(--blue);margin:3px 0;background:#f4f8fb}
+.atlas td{padding:3px 10px 3px 0;font-size:14px}.atlas td.n{text-align:right;font-family:ui-monospace,Menlo,monospace}
+.mem{font-size:14px;padding:6px 10px;border-left:3px solid var(--blue);margin:4px 0;background:#f4f8fb;line-height:1.4}
 .log{font-family:ui-monospace,Menlo,monospace;font-size:11px;white-space:pre-wrap;background:#f9f9f9;border:1px solid var(--line);padding:6px;max-height:120px;overflow:auto}
 .err{color:var(--red);font-size:12px}
 .wide{grid-column:1/-1}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;font-size:12px;margin-left:6px}
+.pill.warn{background:#ffbe2e;color:#1b1b1b}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfd4d8;border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 .spin.w{border-color:rgba(255,255,255,.35);border-top-color:#fff}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -62,8 +65,8 @@ svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
 .mapmsg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.92);padding:10px 16px;border:1px solid var(--line);font-size:14px}
 .maprel{position:relative}
 </style></head><body>
-<div id="busy"></div><div class="gov">Data center permit harness · NJ rules: N.J.A.C. 7:29 noise · 7:7A wetlands · 7:8 stormwater · NJDEP GP-005A air · Water Allocation · demo setback 200 ft</div>
-<header><div><h1>Permit Harness</h1><div class="sub">Designer agent · code-scored NJ permit reviewer · memory and checkpoints in MongoDB Atlas</div></div><div class="status"><span id="hdrspin" style="display:none"><i class="spin w"></i>working…</span> <span id="hdrstatus"></span></div></header>
+<div id="busy"></div>
+<header><div><h1>Permit Harness</h1><div class="sub">An AI designer that redesigns a data center until the permit review passes. Real parcels, real rules, memory in MongoDB Atlas.</div></div><div class="status"><span id="hdrspin" style="display:none"><i class="spin w"></i>working…</span> <span id="hdrstatus" title="connection"></span></div></header>
 <main>
  <div class="left">
   <div class="card"><h2>Sites</h2><div id="sites"></div>
@@ -107,7 +110,7 @@ svg.sat .maplabel{fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
 
  <div class="right">
   <div class="card"><h2>Permit review</h2>
-   <div id="site" style="font-size:12.5px;color:var(--ink2)"></div>
+   <div id="site" style="font-size:14px;color:var(--ink2)"></div>
    <div id="pen" class="pen-big"></div>
    <div id="knobs" class="knobs"></div><div id="meas" class="meas"></div>
    <div id="viols"></div><div id="lessons"></div><div id="rej" class="rej"></div>
@@ -163,7 +166,7 @@ let BUSY=0;function busy(d){BUSY=Math.max(0,BUSY+d);$('busy').classList.toggle('
 const api=async(u,o)=>{busy(1);try{const r=await fetch(u,o);if(!r.ok){let t=await r.text();try{t=JSON.parse(t).detail}catch(e){}throw new Error(t)}return await r.json()}finally{busy(-1)}};
 const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 
-async function boot(){CFG=await api('/api/config');loadCatalog();$('hdrstatus').textContent=(CFG.offline?'offline demo store':'Atlas db '+CFG.db)+' · designer '+CFG.designer_model.split('/').pop()+(CFG.have_llm?'':' · NO MODEL KEY (heuristic)');await loadSites();await loadRuns();loadAtlas();if(RUNS.length){selectRun(RUNS[RUNS.length-1].run_id)}else if(SITES.length){selectSite(SITES[0].site_id)}}
+async function boot(){CFG=await api('/api/config');loadCatalog();$('hdrstatus').innerHTML=CFG.offline?'<span class="pill">offline demo</span>':'<span class="pill">● connected to MongoDB Atlas</span>'+(CFG.have_llm?'':'<span class="pill warn">no model key</span>');await loadSites();await loadRuns();loadAtlas();if(RUNS.length){selectRun(RUNS[RUNS.length-1].run_id)}else if(SITES.length){selectSite(SITES[0].site_id)}}
 async function loadSites(){SITES=await api('/api/sites');$('sites').innerHTML=SITES.map(s=>`<div class="site ${curSite===s.site_id?'sel':''}" onclick="selectSite('${s.site_id}')"><b>${s.name||s.site_id}</b><small>${s.state||'NJ'} · ${s.site_id} · parcel ${s.pin||'-'} · ${s.acres} ac · ${s.homes} homes · ${s.wetlands} wetlands · buildable ${s.buildable_acres} ac</small></div>`).join('')||'<i>no sites yet</i>';$('runsite').innerHTML=SITES.map(s=>`<option value="${s.site_id}">${s.site_id}</option>`).join('');}
 async function layersFor(sid){if(!LAYERS[sid])LAYERS[sid]=await api('/api/sites/'+sid+'/layers');return LAYERS[sid];}
 async function selectSite(sid){curSite=sid;curRun=null;cur=null;clearInterval(pollTimer);runClock(null);working(null);mapmsg('loading parcel, homes and wetlands…');$('runsite').value=sid;await loadSites();const L=await layersFor(sid);if(curSite!==sid||curRun)return;mapmsg(null);drawSiteOnly(L,sid);}
