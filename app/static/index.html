@@ -26,7 +26,13 @@ button.active{background:var(--blue-dark);box-shadow:inset 0 0 0 2px #fff,inset 
 button.cmp{font-size:11px;padding:2px 7px;margin:0}button.cmp.on{background:var(--blue);color:#fff}
 button.danger{background:var(--red)} button.ok{background:var(--green)} button:disabled{opacity:.5;cursor:default}
 input,select{background:#fff;color:var(--ink);border:1px solid #565c65;border-radius:4px;padding:6px 8px;font-size:13px;width:100%;margin-bottom:6px}
-label{font-size:12px;color:var(--ink2);display:block}label[title]{cursor:help}
+label{font-size:12px;color:var(--ink2);display:block}
+.tip{position:relative}
+.tip::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 6px);z-index:50;width:max-content;max-width:320px;background:#1b1b1b;color:#fff;font-size:12.5px;line-height:1.4;font-weight:400;text-transform:none;letter-spacing:0;padding:8px 10px;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .12s,transform .12s;white-space:normal}
+.tip:hover::after,.tip:focus-within::after{opacity:1;transform:translateY(0)}
+.tip.right::after{left:auto;right:0}
+label.tip{cursor:help;display:inline-block;padding-right:6px}
+
 .row{display:flex;gap:6px}.row>*{flex:1}
 .site{padding:8px;border:1px solid var(--line);border-left:4px solid var(--blue);margin-bottom:6px;cursor:pointer;font-size:13px}
 .site.sel{background:#e7f6f8}.site small{color:var(--ink2);display:block}
@@ -234,6 +240,9 @@ function chart(){const svg=$('chart');const W=800,H=240,px=56,py=22;const runs=R
 async function loadAtlas(){try{const a=await api('/api/atlas');let rows=Object.entries(a.collections).map(([k,v])=>`<tr><td>${k}</td><td class="n">${v.toLocaleString()}</td></tr>`).join('');rows+=(a.indexes||[]).map(ix=>`<tr><td>${ix.collection}.${ix.name}</td><td class="n">${ix.type}${ix.queryable?' ✓':' …'}</td></tr>`).join('');if(a.auto_embed)rows+=`<tr><td colspan="2" style="color:var(--green)">automated embeddings on (Atlas embeds lessons itself)</td></tr>`;$('atlas').innerHTML=rows;}catch(e){$('atlas').innerHTML=`<tr><td class="err">${e.message}</td></tr>`}}
 async function askMem(){const q=$('askq').value.trim();if(!q)return;$('askout').innerHTML='<i>searching…</i>';try{const r=await post('/api/atlas/lessons',{q});$('askout').innerHTML=r.map(l=>`<div class="mem"><b>${l.rule||''}</b> ${l.text}<div style="color:var(--ink2);font-size:12.5px;margin-top:2px">learned on <b>${l.site_id||''}</b>${l.run_id?' · run '+l.run_id:''}${l.round?' · round '+l.round:''}${l.created_at?' · '+new Date(l.created_at).toLocaleString():''}${l.score?' · similarity '+l.score.toFixed(2):''}</div></div>`).join('')||'<i>no lessons yet</i>'}catch(e){$('askout').innerHTML=`<span class="err">${e.message}</span>`}}
 async function askLetters(){const q=$('askl').value.trim();if(!q)return;$('asklout').innerHTML='<i>searching…</i>';try{const r=await post('/api/atlas/letters',{q});$('asklout').innerHTML=r.map(t=>`<div class="mem">${t.slice(0,260)}…</div>`).join('')||'<i>no matches (index may still be building)</i>'}catch(e){$('asklout').innerHTML=`<span class="err">${e.message}</span>`}}
+
+// Instant tooltips: move native title attributes (slow, easy to miss) onto data-tip bubbles.
+document.querySelectorAll('[title]').forEach(el=>{const t=el.getAttribute('title');if(!t||el.tagName==='SVG'||el.closest('svg'))return;el.setAttribute('data-tip',t);el.removeAttribute('title');el.classList.add('tip');if(el.getBoundingClientRect().left>window.innerWidth*0.6)el.classList.add('right');});
 setInterval(loadRuns,6000);
 boot();
 </script></body></html>
