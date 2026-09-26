@@ -49,16 +49,52 @@ def site_layers(site: Site) -> dict:
             layers["rings"]["buffers"].extend(_poly_rings(w.geom.buffer(w.buffer_m)))
     minx, miny, maxx, maxy = site.parcel.buffer(260).bounds
     layers["viewbox"] = [minx, -maxy, maxx - minx, maxy - miny]
-    ox, oy = site.origin_utm
-    w_px = 1400
-    h_px = int(w_px * (maxy - miny) / (maxx - minx))
-    bbox = f"{minx + ox},{miny + oy},{maxx + ox},{maxy + oy}"
-    # Esri World Imagery export in EPSG:32618 (UTM 18N): the same metric frame the plan uses, so no reprojection
-    layers["satellite"] = ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
-                           f"?bbox={bbox}&bboxSR=32618&imageSR=32618&size={w_px},{h_px}&format=jpg&f=image")
-    layers["satellite_fallback"] = ("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
-                                    f"?bbox={bbox}&bboxSR=32618&imageSR=32618&size={w_px},{h_px}&format=jpg&f=image")
+    layers["satellite"] = satellite_layer(site, (minx, miny, maxx, maxy))
     return layers
+
+
+def satellite_layer(site: Site, local_bounds) -> dict:
+    """Aerial imagery for the site, requested in Web Mercator (the native frame of every imagery
+    service) and placed in the plan's local UTM frame: centre, size in metres, and the small
+    rotation between grid north and true north. Primary: NJ 2020 1-ft orthophotos (NJOGIS WMS).
+    Fallback: Esri World Imagery."""
+    from pyproj import Transformer
+    import math
+    to_wgs = Transformer.from_crs("EPSG:32618", "EPSG:4326", always_xy=True)
+    to_utm = Transformer.from_crs("EPSG:4326", "EPSG:32618", always_xy=True)
+    to_merc = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    merc_to_utm = Transformer.from_crs("EPSG:3857", "EPSG:32618", always_xy=True)
+    ox, oy = site.origin_utm
+    minx, miny, maxx, maxy = local_bounds
+    pad = 0.04 * max(maxx - minx, maxy - miny)
+    corners = [(minx - pad, miny - pad), (maxx + pad, miny - pad), (maxx + pad, maxy + pad), (minx - pad, maxy + pad)]
+    merc = [to_merc.transform(*to_wgs.transform(x + ox, y + oy)) for x, y in corners]
+    mx0, my0 = min(m[0] for m in merc), min(m[1] for m in merc)
+    mx1, my1 = max(m[0] for m in merc), max(m[1] for m in merc)
+    # image centre and size back in local metres
+    cx_u, cy_u = merc_to_utm.transform((mx0 + mx1) / 2, (my0 + my1) / 2)
+    wx0, wy0 = merc_to_utm.transform(mx0, (my0 + my1) / 2)
+    wx1, wy1 = merc_to_utm.transform(mx1, (my0 + my1) / 2)
+    hx0, hy0 = merc_to_utm.transform((mx0 + mx1) / 2, my0)
+    hx1, hy1 = merc_to_utm.transform((mx0 + mx1) / 2, my1)
+    w_m = math.hypot(wx1 - wx0, wy1 - wy0)
+    h_m = math.hypot(hx1 - hx0, hy1 - hy0)
+    # rotation of true north relative to UTM grid north at the site (degrees, CCW positive in y-up local coords)
+    lon, lat = to_wgs.transform(ox, oy)
+    n0 = to_utm.transform(lon, lat)
+    n1 = to_utm.transform(lon, lat + 0.001)
+    rot = math.degrees(math.atan2(n1[1] - n0[1], n1[0] - n0[0])) - 90.0
+    w_px = 1600
+    h_px = int(w_px * (my1 - my0) / (mx1 - mx0))
+    bbox = f"{mx0},{my0},{mx1},{my1}"
+    return {
+        "cx": round(cx_u - ox, 2), "cy": round(cy_u - oy, 2), "w": round(w_m, 2), "h": round(h_m, 2), "rot": round(rot, 4),
+        "url": ("https://img.nj.gov/imagerywms/Natural2020?service=WMS&version=1.1.1&request=GetMap&layers=Natural2020"
+                f"&styles=&srs=EPSG:3857&bbox={bbox}&width={w_px}&height={h_px}&format=image/jpeg"),
+        "fallback": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+                     f"?bbox={bbox}&bboxSR=3857&imageSR=3857&size={w_px},{h_px}&format=jpg&f=image"),
+        "credit": "Imagery: NJ 2020 Natural Color Orthophotography, 1 ft (NJOGIS); fallback Esri World Imagery (Maxar, Earthstar Geographics). Parcels: NJOGIS. Wetlands: NJDEP 2020.",
+    }
 
 
 def collect(store, run_id: str) -> dict:
@@ -218,7 +254,8 @@ window.init3d = function(layers){
     const vb=layers.viewbox; const cx=vb[0]+vb[2]/2, cz=-(vb[1]+vb[3]/2);
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(vb[2]*1.6, vb[3]*1.6), new THREE.MeshLambertMaterial({color:0xf3f4f5})); ground.rotation.x=-Math.PI/2; ground.position.set(cx,-0.5,-( -vb[1]-vb[3]/2 )); V.siteGroup.add(ground);
     // satellite plane exactly over the 2D viewbox extent (same UTM frame as the export request)
-    const sat=new THREE.Mesh(new THREE.PlaneGeometry(vb[2], vb[3]), new THREE.MeshLambertMaterial({color:0xffffff})); sat.rotation.x=-Math.PI/2; sat.position.set(cx,-0.2,-( -vb[1]-vb[3]/2 )); sat.visible=false; V.siteGroup.add(sat); V.sat=sat; V.satUrl=null;
+    const S=layers.satellite;
+    const sat=new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshLambertMaterial({color:0xffffff})); sat.rotation.order='YXZ'; sat.rotation.y=S.rot*Math.PI/180; sat.rotation.x=-Math.PI/2; sat.position.set(S.cx,-0.2,-S.cy); sat.visible=false; V.siteGroup.add(sat); V.sat=sat; V.satUrl=null;
     V.parcelMeshes=[];
     R.parcel.forEach(r=>{ const pm=flat(r,0xf5f1e6,0); V.parcelMeshes.push(pm); V.siteGroup.add(pm); V.siteGroup.add(outline(r,0x565c65,0.4,false)); });
     R.commercial.forEach(r=>V.siteGroup.add(extrude(r,0xd9d9d9,4)));
@@ -233,11 +270,11 @@ window.init3d = function(layers){
 };
 window.setSat3d = function(on, layers){
   if(!V.ready) return;
-  if(on && V.satUrl!==layers.satellite){
+  if(on && V.satUrl!==layers.satellite.url){
     const loader=new THREE.TextureLoader(); loader.setCrossOrigin('anonymous');
-    const apply=(tex)=>{ tex.colorSpace=THREE.SRGBColorSpace; V.sat.material=new THREE.MeshLambertMaterial({map:tex}); V.sat.material.needsUpdate=true; };
-    loader.load(layers.satellite, apply, undefined, ()=>loader.load(layers.satellite_fallback, apply));
-    V.satUrl=layers.satellite;
+    const apply=(tex)=>{ tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=8; V.sat.material=new THREE.MeshLambertMaterial({map:tex}); V.sat.material.needsUpdate=true; };
+    loader.load(layers.satellite.url, apply, undefined, ()=>loader.load(layers.satellite.fallback, apply));
+    V.satUrl=layers.satellite.url;
   }
   V.sat.visible=on; V.parcelMeshes.forEach(m=>{ m.material.transparent=true; m.material.opacity= on?0.15:1; m.material.needsUpdate=true; });
 };
@@ -281,8 +318,9 @@ function show(i){
   const svg=document.getElementById('map');
   svg.setAttribute('viewBox',L.viewbox.join(' '));
   svg.classList.toggle('sat', SAT);
-  const satImg = SAT ? `<image href="${L.satellite}" x="${L.viewbox[0]}" y="${L.viewbox[1]}" width="${L.viewbox[2]}" height="${L.viewbox[3]}" preserveAspectRatio="none" onerror="this.setAttribute('href','${L.satellite_fallback}')"/>` : '';
-  document.getElementById('attrib').textContent = SAT ? 'Imagery: Esri World Imagery (Maxar, Earthstar Geographics, USDA, USGS, AeroGRID, IGN, GIS User Community); USGS National Map fallback. Parcels: NJOGIS. Wetlands: NJDEP 2020.' : '';
+  const S=L.satellite;
+  const satImg = SAT ? `<image href="${S.url}" x="${S.cx-S.w/2}" y="${-S.cy-S.h/2}" width="${S.w}" height="${S.h}" preserveAspectRatio="none" transform="rotate(${-S.rot} ${S.cx} ${-S.cy})" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.setAttribute('href','${S.fallback}')}"/>` : '';
+  document.getElementById('attrib').textContent = SAT ? S.credit : '';
   svg.innerHTML = satImg + `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fff"/><rect width="3" height="6" fill="#8d9297"/></pattern></defs>`
     + polys(L.parcel,'parcel')+polys(L.commercial,'comm')+polys(L.homes,'home')+polys(L.wetlands,'wet')+polys(L.buffers,'buf')
     + R.objects.map(o=>`<polygon class="obj" points="${o.pts}" fill="${objFill(o)}"><title>${o.id}</title></polygon>`).join('')
