@@ -67,10 +67,21 @@ Hard rules 10 points, medium 5, soft 1. Zero means the permit passes.
 
 ## Dev tooling
 
-`mcp.example.json` (copy it to `.mcp.json`) wires the MongoDB MCP server into Claude Code (read-only) so the coding agent can inspect the live cluster:
+`.mcp.json` wires the MongoDB MCP server into Claude Code (read-only) so the coding agent can inspect the live cluster:
 `export MDB_MCP_CONNECTION_STRING="$(grep MONGODB_URI .env | cut -d= -f2-)"` before starting Claude Code.
 
-## Run it
+## The app (live control panel)
+
+```bash
+uv run uvicorn app.server:app --port 8000      # then open http://localhost:8000
+```
+
+Add a real NJ parcel by PAMS PIN (fetched live from NJ GIS, loaded into Atlas), start a run, watch rounds arrive
+from Atlas as they happen, start one with a simulated crash and press **Resume after crash**, compare runs on the
+penalty chart (memory on vs memory off), flip between 2D plan, 3D and the NJ 2020 aerial, and query the memory
+directly (Vector Search over lessons, Atlas Search over rejection letters). `PH_OFFLINE=1` runs it with no network.
+
+## Run it (command line)
 
 ```bash
 cp .env.example .env            # fill in MONGODB_URI (Atlas Hackathon Sandbox) and OPENROUTER_API_KEY
