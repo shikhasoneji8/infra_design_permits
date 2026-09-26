@@ -74,7 +74,8 @@ def index():
 @app.get("/api/config")
 def api_config():
     return {"offline": OFFLINE, "db": C.MONGODB_DB, "designer_model": C.DESIGNER_MODEL, "reviewer_model": C.REVIEWER_MODEL,
-            "atlas_auto_embed": C.ATLAS_AUTO_EMBED, "have_llm": bool(C.OPENROUTER_API_KEY), "target_mw": C.TARGET_IT_MW}
+            "atlas_auto_embed": C.ATLAS_AUTO_EMBED, "have_llm": bool(C.OPENROUTER_API_KEY), "target_mw": C.TARGET_IT_MW,
+            "fast_designer_model": C.FAST_DESIGNER_MODEL}
 
 
 # ------------------------------------------------------------------ sites ----
@@ -139,13 +140,17 @@ class NewRun(BaseModel):
     crash_after: Optional[int] = None
     use_llm: bool = True
     resume: bool = False
+    speed: str = "quality"  # quality | fast
 
 
 def _worker(body: NewRun):
     rid = body.run_id
     try:
+        fast = body.speed == "fast"
         run_loop(body.site_id, rid, store=store(), max_rounds=body.max_rounds, resume=body.resume,
-                 use_llm=body.use_llm, crash_after_round=body.crash_after, use_memory=body.memory)
+                 use_llm=body.use_llm, crash_after_round=body.crash_after, use_memory=body.memory,
+                 designer_model=C.FAST_DESIGNER_MODEL if fast else C.DESIGNER_MODEL,
+                 reviewer_model=C.FAST_REVIEWER_MODEL if fast else C.REVIEWER_MODEL)
         with _lock:
             _jobs[rid]["status"] = "finished"
     except SystemExit as e:
@@ -166,7 +171,7 @@ def api_start_run(body: NewRun):
         if j and j["status"] == "running":
             raise HTTPException(409, "run already in progress")
         _jobs[body.run_id] = {"status": "running", "error": None, "started": time.time(), "site_id": body.site_id,
-                              "memory": body.memory, "crash_after": body.crash_after}
+                              "memory": body.memory, "crash_after": body.crash_after, "speed": body.speed}
     threading.Thread(target=_worker, args=(body,), daemon=True).start()
     return {"run_id": body.run_id, "status": "running"}
 
@@ -177,7 +182,7 @@ def api_resume(run_id: str):
     if not r:
         raise HTTPException(404, "run not found")
     body = NewRun(site_id=r["site_id"], run_id=run_id, max_rounds=r.get("max_rounds", 12), resume=True,
-                  memory=_jobs.get(run_id, {}).get("memory", True))
+                  memory=_jobs.get(run_id, {}).get("memory", True), speed=_jobs.get(run_id, {}).get("speed", "quality"))
     return api_start_run(body)
 
 
@@ -234,7 +239,7 @@ def api_run(run_id: str):
         })
     j = _jobs.get(run_id, {})
     return {"run_id": run_id, "site_id": r["site_id"], "status": r["status"], "job": j.get("status"), "error": j.get("error"),
-            "memory": j.get("memory", True), "rounds": rounds}
+            "memory": j.get("memory", True), "speed": j.get("speed", "quality"), "rounds": rounds}
 
 
 # ------------------------------------------------------------------ atlas ----

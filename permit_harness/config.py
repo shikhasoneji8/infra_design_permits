@@ -19,6 +19,8 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Cheap model designs, strong model reviews. Both via OpenRouter.
 DESIGNER_MODEL = os.getenv("DESIGNER_MODEL", "anthropic/claude-sonnet-4.5")
+FAST_DESIGNER_MODEL = os.getenv("FAST_DESIGNER_MODEL", "anthropic/claude-haiku-4.5")
+FAST_REVIEWER_MODEL = os.getenv("FAST_REVIEWER_MODEL", "anthropic/claude-haiku-4.5")
 REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "anthropic/claude-sonnet-4.5")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-small")
 EMBEDDING_DIMS = int(os.getenv("EMBEDDING_DIMS", "1536"))
