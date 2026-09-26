@@ -29,6 +29,8 @@ from permit_harness.store import MongoStore, MemoryStore
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from report import site_layers, _poly_points  # noqa: E402
+from fetch_site import CATALOG, PARCELS as NJ_PARCELS, TX_PARCELS  # noqa: E402
+import requests  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 STATIC = ROOT / "app" / "static"
@@ -111,6 +113,39 @@ class NewSite(BaseModel):
     site_id: str
     name: Optional[str] = None
     state: str = "nj"
+
+
+@app.get("/api/catalog")
+def api_catalog():
+    """Vetted parcels the user can add with one click, minus the ones already loaded."""
+    loaded = {s["site_id"] for s in api_sites()}
+    return [c for c in CATALOG if c["site_id"] not in loaded]
+
+
+@app.get("/api/lookup")
+def api_lookup(state: str = "nj", q: str = ""):
+    """Find parcels by street address text (NJ: PROP_LOC + MUN_NAME; TX Travis: situs_address)."""
+    q = q.strip().upper()
+    if len(q) < 3:
+        return []
+    try:
+        if state.lower() == "tx":
+            r = requests.post(TX_PARCELS, data={"f": "json", "where": f"situs_address LIKE '%{q}%' AND tcad_acres >= 5",
+                                                "outFields": "PROP_ID,situs_address,tcad_acres", "returnGeometry": "false",
+                                                "resultRecordCount": "10"}, timeout=40).json()
+            return [{"state": "tx", "pin": str(f["attributes"]["PROP_ID"]), "name": f"{f['attributes']['situs_address']} ({float(f['attributes']['tcad_acres'] or 0):.1f} ac)",
+                     "acres": f["attributes"]["tcad_acres"]} for f in r.get("features", [])]
+        parts = [p.strip() for p in q.split(",")]
+        where = f"PROP_LOC LIKE '%{parts[0]}%' AND CALC_ACRE >= 5"
+        if len(parts) > 1:
+            where += f" AND MUN_NAME LIKE '{parts[1]}%'"
+        r = requests.post(NJ_PARCELS, data={"f": "json", "where": where, "outFields": "PAMS_PIN,PROP_LOC,MUN_NAME,CALC_ACRE,PROP_CLASS",
+                                            "returnGeometry": "false", "resultRecordCount": "10"}, timeout=40).json()
+        return [{"state": "nj", "pin": f["attributes"]["PAMS_PIN"],
+                 "name": f"{f['attributes']['PROP_LOC']}, {f['attributes']['MUN_NAME']} ({float(f['attributes']['CALC_ACRE'] or 0):.1f} ac, class {f['attributes']['PROP_CLASS']})",
+                 "acres": f["attributes"]["CALC_ACRE"]} for f in r.get("features", [])]
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"lookup failed: {e}")
 
 
 @app.post("/api/sites")

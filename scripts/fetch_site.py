@@ -30,6 +30,22 @@ TX_DEMO_SITES = [
     {"pin": "782904", "site_id": "austin_gilbert_rd", "name": "5412 Gilbert Rd, Austin TX (27 ac, Travis County)"},
     {"pin": "201589", "site_id": "austin_decker_lake", "name": "9801 Decker Lake Rd, Austin TX (27 ac, Travis County)"},
 ]
+# Vetted candidates (homes and wetlands close enough that the rules bite). The app's "Add a site" list.
+CATALOG = [
+    {"state": "nj", "pin": "1614_302_72", "site_id": "wayne_west_belt", "name": "West Belt, Wayne NJ (36 ac vacant, 120 homes near)"},
+    {"state": "nj", "pin": "2008_6_1.01", "site_id": "kenilworth_monroe", "name": "251 Monroe Ave, Kenilworth NJ (36 ac industrial, 328 homes)"},
+    {"state": "nj", "pin": "0614_2326_1.01", "site_id": "vineland_crystal", "name": "563 Crystal Ave, Vineland NJ (39 ac industrial, 388 homes)"},
+    {"state": "nj", "pin": "1614_1508_2", "site_id": "wayne_haul_rd", "name": "55 Haul Rd, Wayne NJ (30 ac industrial, 206 homes)"},
+    {"state": "nj", "pin": "1614_604_17", "site_id": "wayne_dey_rd", "name": "150 Dey Rd, Wayne NJ (18 ac industrial, 42 homes, 10 wetlands)"},
+    {"state": "nj", "pin": "1614_302_2", "site_id": "wayne_demarest", "name": "74 Demarest Dr, Wayne NJ (28 ac industrial, 81 homes, 8 wetlands)"},
+    {"state": "nj", "pin": "1614_4402_11", "site_id": "wayne_colfax", "name": "835 Colfax Rd, Wayne NJ (17 ac vacant, 152 homes)"},
+    {"state": "nj", "pin": "1614_1616_49", "site_id": "wayne_route23", "name": "1701 Route 23, Wayne NJ (16 ac vacant, 136 homes)"},
+    {"state": "nj", "pin": "0614_3202_24.01", "site_id": "vineland_maple", "name": "2363 Maple Ave, Vineland NJ (31 ac commercial, 214 homes, 12 wetlands)"},
+    {"state": "nj", "pin": "0614_1202_5", "site_id": "vineland_west_blvd", "name": "2192 N West Blvd, Vineland NJ (49 ac industrial, 46 homes)"},
+    {"state": "tx", "pin": "782904", "site_id": "austin_gilbert_rd", "name": "5412 Gilbert Rd, Austin TX (27 ac, 165 lots near)"},
+    {"state": "tx", "pin": "201589", "site_id": "austin_decker_lake", "name": "9801 Decker Lake Rd, Austin TX (27 ac, 127 lots near)"},
+    {"state": "tx", "pin": "109934", "site_id": "austin_hamilton_pool", "name": "16400 Hamilton Pool Rd, Austin TX (26 ac, 168 lots near)"},
+]
 DEMO_SITES = [
     # Wayne: dev site, dense homes and wetlands so every rule bites.
     {"pin": "1614_302_72", "site_id": "wayne_west_belt", "name": "West Belt, Wayne NJ (36 ac vacant)"},
