@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: permit-harness
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: infra_design_permits
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ATLAS_AUTO_EMBED
+        value: "false"
