@@ -1,0 +1,30 @@
+[project]
+name = "permit-harness"
+version = "0.1.0"
+description = "Long-horizon agent harness that designs a data center on a real NJ parcel, gets rejected by a strict permit reviewer, remembers every rejection in MongoDB Atlas, and redesigns until it passes."
+requires-python = ">=3.10"
+dependencies = [
+    "pymongo[srv]>=4.10",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "pydantic>=2.6",
+    "openai>=1.40",
+    "python-dotenv>=1.0",
+    "requests>=2.31",
+    "numpy>=1.26",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+local-embeddings = ["fastembed>=0.3"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["permit_harness*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
