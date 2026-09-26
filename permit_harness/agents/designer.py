@@ -41,6 +41,7 @@ SCHEMA = {
     "cooling_barrier": "true | false (acoustic screen wall around the cooling yard, -8 dB)",
     "generator_tier": "tier2 | tier4f",
     "generator_enclosure": "standard | critical_silenced",
+    "generator_screen": "true | false (screening wall or berm around the generator yard; satisfies the line-of-sight rule, -5 dB)",
     "bess_mw": "number >= 0",
     "water_source": "municipal | well",
     "objects": [{"id": "hall", "kind": "data_hall", "x": 0, "y": 0, "w": 60, "l": 100, "h": 15, "rotation_deg": 0}],
@@ -199,6 +200,8 @@ def heuristic_design(site: Site, prev_plan: Plan | None, prev_review: Review | N
             plan.cooling_barrier = True
     if "R2" in rules and prev_plan.generator_enclosure == "standard" and _rounds_hint(prev_review) >= 2:
         plan.generator_enclosure = "critical_silenced"
+    if "R9" in rules and not prev_plan.generator_screen:
+        plan.generator_screen = True
     # Re-place anything invalid
     keep = [o for o in plan.objects if o.id not in offenders]
     plan.objects = keep

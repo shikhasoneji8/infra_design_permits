@@ -70,6 +70,9 @@ COOLING_DBA_BY_OPTION = {"standard": COOLING_DBA_AT_REF, "low_noise": 70.0}
 # Solid acoustic screen wall around the cooling yard: 8 dB insertion loss is a conservative
 # figure for a barrier that breaks line of sight (FHWA barrier guidance: 5 dB minimum, 10+ typical).
 COOLING_BARRIER_DB = 8.0
+# Generator yard screening wall / berm (what Loudoun County and NoVA HOAs actually require):
+# breaks line of sight from homes and gives ~5 dB on the gensets.
+GENERATOR_SCREEN_DB = 5.0
 BUILDING_SHIELDING_DB = 10.0  # flat credit if the data hall blocks line of sight (our assumption)
 NIGHT_LIMIT_RESIDENTIAL_DBA = 50.0  # N.J.A.C. 7:29-1.2, 10pm-7am at residential property line
 DAY_LIMIT_RESIDENTIAL_DBA = 65.0  # N.J.A.C. 7:29-1.2, 7am-10pm

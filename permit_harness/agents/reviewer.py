@@ -67,7 +67,7 @@ def _review_template(site: Site, plan: Plan, rev: Review) -> tuple[str, list[dic
         "R6": "Use closed-loop air cooling (or municipal supply) so withdrawals stay under 100,000 gal/day and no Water Allocation Permit is needed.",
         "R7": "Any plan with more than 0.25 acre of new pavement needs a stormwater basin sized to about 10% of impervious area.",
         "R8": f"Keep the hall and substation at least 200 ft from residential lot lines; on this kind of parcel that means shifting them {opposite}.",
-        "R9": f"Hide generators behind the hall relative to the nearest homes ({home_sector} side of the parcel).",
+        "R9": f"Hide generators behind the hall relative to the nearest homes ({home_sector} side of the parcel), or screen the generator yard with a wall or berm.",
         "CAP": "Do not shrink the facility to pass; solve rules with placement and equipment choices.",
     }
     for v in rev.violations:

@@ -116,7 +116,7 @@ def collect(store, run_id: str) -> dict:
                        "violations": [{"rule": v["rule"], "title": v["title"], "measured": v["measured"], "penalty": v["penalty"]}
                                       for v in rv["violations"]],
                        "rejection": rv.get("rejection_text", ""), "lessons_used": d.get("lessons_used", []),
-                       "knobs": {k: getattr(plan, k) for k in ["it_mw", "cooling_type", "cooling_noise", "cooling_barrier", "generator_tier",
+                       "knobs": {k: getattr(plan, k) for k in ["it_mw", "cooling_type", "cooling_noise", "cooling_barrier", "generator_tier", "generator_screen",
                                                               "generator_enclosure", "bess_mw", "water_source"]},
                        "measured": {k: v for k, v in rv["measured"].items() if k in
                                     ["night_dba_worst_home", "day_dba_worst_home", "nox_pte_tpy", "water_gpd", "new_impervious_acres"]}})
@@ -329,7 +329,7 @@ function show(i){
   if(VIEW==='3d' && window.show3d){ window.init3d(L); window.show3d(R.objects, COLORS, `round ${R.round}   penalty ${R.penalty}`); }
   document.getElementById('site').textContent=cur.site_name+'  ('+cur.site_id+')';
   const pen=document.getElementById('pen'); pen.textContent=(R.passed?'PERMIT APPROVED · penalty ':'PERMIT DENIED · penalty ')+R.penalty; pen.className='pen '+(R.passed?'pass':'fail');
-  const k=R.knobs; document.getElementById('knobs').textContent=`${k.it_mw} MW IT · cooling ${k.cooling_type}/${k.cooling_noise}${k.cooling_barrier?'+barrier':''} · gensets ${k.generator_tier}/${k.generator_enclosure} · BESS ${k.bess_mw} MW · water ${k.water_source}`;
+  const k=R.knobs; document.getElementById('knobs').textContent=`${k.it_mw} MW IT · cooling ${k.cooling_type}/${k.cooling_noise}${k.cooling_barrier?'+barrier':''} · gensets ${k.generator_tier}/${k.generator_enclosure}${k.generator_screen?'+screen':''} · BESS ${k.bess_mw} MW · water ${k.water_source}`;
   document.getElementById('viols').innerHTML=R.violations.map(v=>`<div class="viol"><b>${v.rule}</b> (${v.penalty}) ${v.title}<br><span>${v.measured}</span></div>`).join('') || '<div class="viol ok">No violations. All measured values are within limits.</div>';
   document.getElementById('lessons').innerHTML=(R.lessons_used||[]).slice(0,4).map(t=>`<div class="lesson">from memory: ${t}</div>`).join('');
   document.getElementById('rej').textContent=R.rejection||'';

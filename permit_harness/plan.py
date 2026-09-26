@@ -33,6 +33,7 @@ class Plan(BaseModel):
     cooling_barrier: bool = Field(default=False, description="acoustic screen wall around the cooling yard (-8 dB)")
     generator_tier: Literal["tier2", "tier4f"] = "tier2"
     generator_enclosure: Literal["standard", "critical_silenced"] = "standard"
+    generator_screen: bool = Field(default=False, description="screening wall or berm around the generator yard (hides them from homes, -5 dB)")
     bess_mw: float = Field(default=0.0, ge=0, description="battery storage replacing diesel gensets, MW")
     water_source: Literal["municipal", "well"] = "well"
     objects: list[PlacedObject]

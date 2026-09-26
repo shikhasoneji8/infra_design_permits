@@ -112,7 +112,7 @@ def evaluate(plan: Plan, site: Site) -> Review:
                            objects=outside + [o for pair in overlaps for o in pair.split('x')]))
 
     # R1 / R2: noise
-    gen_dba = C.GENERATOR_DBA_BY_ENCLOSURE[plan.generator_enclosure]
+    gen_dba = C.GENERATOR_DBA_BY_ENCLOSURE[plan.generator_enclosure] - (C.GENERATOR_SCREEN_DB if plan.generator_screen else 0.0)
     cool_dba = C.COOLING_DBA_BY_OPTION[plan.cooling_noise] - (C.COOLING_BARRIER_DB if plan.cooling_barrier else 0.0)
     night_sources = [(o, cool_dba, C.COOLING_REF_DISTANCE_M) for o in cools]
     if C.GENERATORS_RUN_AT_NIGHT:
@@ -232,7 +232,7 @@ def evaluate(plan: Plan, site: Site) -> Review:
 
     # R9 (soft): generators visible from the nearest home
     los = []
-    if gens and homes_near and halls:
+    if gens and homes_near and halls and not plan.generator_screen:
         hall_polys = [h.footprint() for h in halls]
         for g in gens:
             from shapely.geometry import Point
@@ -247,7 +247,7 @@ def evaluate(plan: Plan, site: Site) -> Review:
                            limit="building should block the line of sight",
                            citation="Northern Virginia HOA / Prince William County design guidance",
                            objects=los,
-                           detail="Line generators up along the hall wall that faces away from homes."))
+                           detail="Line generators up along the hall wall that faces away from homes, or add a screening wall/berm around the generator yard (generator_screen)."))
 
     # Capacity
     frac = plan.it_mw / C.TARGET_IT_MW
