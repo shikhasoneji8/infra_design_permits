@@ -20,20 +20,21 @@ Return ONLY JSON: {"rejection": "<letter, <= 180 words>", "lessons": [{"rule": "
 One lesson per violated rule, each under 30 words."""
 
 
-def review(site: Site, plan: Plan, rev: Review, use_llm: bool = True, model: str = C.REVIEWER_MODEL) -> tuple[str, list[dict]]:
+def review(site: Site, plan: Plan, rev: Review, use_llm: bool = True, model: str = C.REVIEWER_MODEL,
+           precedents: list[str] | None = None) -> tuple[str, list[dict]]:
     """Returns (rejection_text, lessons[{rule, text}])."""
     if rev.passed:
         return ("PERMIT APPROVED. All measured values are within limits. "
                 f"Capacity retained: {rev.measured.get('capacity_fraction', 1):.0%} of target."), []
     if use_llm and have_llm():
         try:
-            return _review_llm(site, plan, rev, model)
+            return _review_llm(site, plan, rev, model, precedents or [])
         except Exception as e:  # noqa: BLE001
             print(f"[reviewer] LLM review failed ({type(e).__name__}: {e}); using templates")
     return _review_template(site, plan, rev)
 
 
-def _review_llm(site, plan, rev, model):
+def _review_llm(site, plan, rev, model, precedents):
     summary = site.summary_for_llm()
     user = (f"SITE CONTEXT (homes by compass sector, wetlands): {json.dumps({k: summary[k] for k in ['homes_by_sector', 'wetlands', 'acres']})}\n\n"
             f"PLAN CHOICES: it_mw={plan.it_mw}, cooling={plan.cooling_type}/{plan.cooling_noise}, "
@@ -41,6 +42,9 @@ def _review_llm(site, plan, rev, model):
             f"VIOLATIONS (penalty {rev.penalty}):\n" +
             "\n".join(f"- {v.rule} {v.title}. Measured: {v.measured}. Limit: {v.limit}. Rule: {v.citation}. Objects: {v.objects[:6]}"
                       for v in rev.violations))
+    if precedents:
+        user += "\n\nPRECEDENT (earlier rejection letters found by Atlas Search; keep your letter consistent with them):\n" + \
+                "\n".join(f"- {p[:300]}" for p in precedents)
     data = extract_json(chat(model, SYSTEM, user, json_mode=True, temperature=0.3, max_tokens=1200))
     lessons = [{"rule": l.get("rule", "?"), "text": l["text"].strip()} for l in data.get("lessons", []) if l.get("text")]
     return data.get("rejection", "").strip(), lessons

@@ -31,7 +31,9 @@ def main():
         nh = db.nearest_home(doc["_id"], lon, lat)
         if nh:
             print(f"   $geoNear from parcel centroid -> nearest home {nh.get('address') or nh['pin']} at {nh['distance_m']:.0f} m")
-    print("vector index queryable:", db.vector_index_ready(), "(if False, wait a minute; the loop falls back to recency until then)")
+    print("waiting for the Atlas Vector Search index to become queryable ...", end=" ", flush=True)
+    print("ready" if db.wait_for_indexes(180) else "not yet (the loop falls back to recency until it is)")
+    print("automated embeddings:", "ON (Atlas/Voyage embeds lessons.text itself)" if __import__("permit_harness.config", fromlist=["c"]).ATLAS_AUTO_EMBED else "off (client-side embeddings)")
 
 
 if __name__ == "__main__":

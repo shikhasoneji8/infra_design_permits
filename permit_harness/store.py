@@ -1,16 +1,31 @@
-"""Storage interface for the loop. `MongoStore` is the real thing (Atlas). `MemoryStore`
-is a dict-backed twin used by the unit tests and by `--offline` runs, so the loop logic
-can be exercised anywhere."""
+"""Storage interface for the graph. `MongoStore` is the real thing (Atlas + LangGraph
+MongoDBSaver). `MemoryStore` is a dict-backed twin (+ InMemorySaver) used by the unit tests
+and by `--offline` runs, so the loop logic can be exercised anywhere."""
 from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
 
+from . import config as C
 from . import db as D
 
 
 class MongoStore:
     name = "atlas"
+
+    def __init__(self):
+        self._saver = None
+
+    @property
+    def atlas_auto_embed(self) -> bool:
+        return C.ATLAS_AUTO_EMBED
+
+    def checkpointer(self):
+        """LangGraph's MongoDB checkpointer: graph state lands in `checkpoints` / `checkpoint_writes`."""
+        if self._saver is None:
+            from langgraph.checkpoint.mongodb import MongoDBSaver
+            self._saver = MongoDBSaver(D.client(), db_name=C.MONGODB_DB)
+        return self._saver
 
     def ensure(self):
         D.ensure_indexes()
@@ -45,6 +60,16 @@ class MongoStore:
     def similar_lessons(self, emb, k=6, exclude_site=None):
         return D.similar_lessons(emb, k, exclude_site)
 
+    def similar_lessons_text(self, text, k=6, exclude_site=None):
+        return D.similar_lessons_text(text, k, exclude_site)
+
+    def search_rejections(self, text, k=3):
+        try:
+            return D.search_rejections(text, k)
+        except Exception as e:  # noqa: BLE001
+            print(f"[atlas search] {e}")
+            return []
+
     def nearest_home(self, site_id, lon, lat):
         return D.nearest_home(site_id, lon, lat)
 
@@ -54,9 +79,17 @@ class MongoStore:
 
 class MemoryStore:
     name = "memory"
+    atlas_auto_embed = False
 
     def __init__(self):
         self.sites, self.runs, self.designs, self.reviews, self.lessons = {}, {}, {}, {}, []
+        self._saver = None
+
+    def checkpointer(self):
+        if self._saver is None:
+            from langgraph.checkpoint.memory import InMemorySaver
+            self._saver = InMemorySaver()
+        return self._saver
 
     def ensure(self):
         pass
@@ -78,6 +111,7 @@ class MemoryStore:
     def checkpoint(self, run_id, round_no, design_id, penalty, capacity_fraction, status="running"):
         r = self.runs[run_id]
         r.update(round=round_no, last_design_id=design_id, last_penalty=penalty, status=status)
+        r["history"] = [h for h in r["history"] if h["round"] != round_no]
         r["history"].append({"round": round_no, "penalty": penalty, "capacity": capacity_fraction,
                              "at": datetime.now(timezone.utc)})
 
@@ -100,6 +134,7 @@ class MemoryStore:
         return self.reviews.get(f"{run_id}:r{round_no}")
 
     def save_lessons(self, run_id, site_id, round_no, lessons):
+        self.lessons = [l for l in self.lessons if not (l["run_id"] == run_id and l["round"] == round_no)]
         for l in lessons:
             self.lessons.append({**l, "run_id": run_id, "site_id": site_id, "round": round_no})
 
@@ -112,6 +147,9 @@ class MemoryStore:
         cands.sort(key=lambda l: -cos(emb, l["embedding"]))
         return [{"text": l["text"], "rule": l["rule"], "site_id": l["site_id"], "context": l.get("context")}
                 for l in cands[:k]]
+
+    def search_rejections(self, text, k=3):
+        return []
 
     def nearest_home(self, site_id, lon, lat):
         return None

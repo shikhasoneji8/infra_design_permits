@@ -48,18 +48,20 @@ SCHEMA = {
 
 
 def design(site: Site, prev_plan: Plan | None, prev_review: Review | None, lessons: list[dict],
-           use_llm: bool = True, model: str = C.DESIGNER_MODEL) -> tuple[Plan, str]:
-    """Returns (plan, source) where source is 'llm' or 'heuristic'."""
+           use_llm: bool = True, model: str = C.DESIGNER_MODEL, regression: dict | None = None) -> tuple[Plan, str]:
+    """Returns (plan, source) where source is 'llm' or 'heuristic'.
+    prev_plan/prev_review are the BEST plan so far (hill-climb); `regression` describes the last
+    attempt if it scored worse than the best, so the model does not repeat it."""
     if use_llm and have_llm():
         try:
-            plan = _design_llm(site, prev_plan, prev_review, lessons, model)
+            plan = _design_llm(site, prev_plan, prev_review, lessons, model, regression)
             return plan, "llm"
         except Exception as e:  # noqa: BLE001
             print(f"[designer] LLM design failed ({type(e).__name__}: {e}); using heuristic policy")
     return heuristic_design(site, prev_plan, prev_review), "heuristic"
 
 
-def _design_llm(site, prev_plan, prev_review, lessons, model) -> Plan:
+def _design_llm(site, prev_plan, prev_review, lessons, model, regression=None) -> Plan:
     parts = [f"SITE:\n{json.dumps(site.summary_for_llm(), indent=1)}",
              f"EQUIPMENT TO PLACE:\n{_equipment_text(prev_plan)}",
              "RULES THE REVIEWER APPLIES (limits): night noise 50 dBA and day noise 65 dBA at any home's lot line; "
@@ -76,8 +78,13 @@ def _design_llm(site, prev_plan, prev_review, lessons, model) -> Plan:
         parts.append("REVIEWER'S REJECTIONS:\n" + "\n".join(
             f"- {v.rule} {v.title}: measured {v.measured}; limit {v.limit}. Objects: {v.objects[:8]}. Hint: {v.detail}"
             for v in prev_review.violations))
+        if regression:
+            parts.append(f"WARNING: your most recent attempt scored WORSE (penalty {regression.get('penalty')}) than the plan above, "
+                         f"so it was discarded. It failed on: {regression.get('rules')}. Start from the plan above, not from that attempt.")
         parts.append("Fix every rejection. Move things decisively (tens of metres, not two), keep everything inside the parcel "
-                     "polygon and out of wetland buffers, and do not reintroduce problems you already solved.")
+                     "polygon and out of wetland buffers, and do not reintroduce problems you already solved. "
+                     "Noise falls 6 dB per doubling of distance and the hall blocks 10 dB; if geometry cannot get you under the "
+                     "limit, change equipment (low_noise cooling, critical_silenced generators) instead of shrinking it_mw.")
     else:
         parts.append("This is round 1. Produce a complete, buildable first plan.")
     parts.append("OUTPUT JSON SCHEMA:\n" + json.dumps(SCHEMA))
@@ -89,7 +96,35 @@ def _design_llm(site, prev_plan, prev_review, lessons, model) -> Plan:
 
 
 def _repair(plan: Plan, site: Site) -> Plan:
-    """Fill in anything the model forgot (missing generators, basins) without changing its choices."""
+    """Code fixes geometry the model got wrong, without touching its choices:
+    objects outside the parcel, inside a wetland buffer, or overlapping are re-placed by grid
+    search; missing equipment is added; surplus generators are dropped."""
+    region = site.buildable().buffer(0.5)
+    anchor = _anchor(plan, site)
+    # data hall first so everything else can anchor to it
+    ordered = sorted(plan.objects, key=lambda o: 0 if o.kind == "data_hall" else 1)
+    fixed: list[PlacedObject] = []
+    moved = 0
+    for o in ordered:
+        fp = o.footprint()
+        ok = region.contains(fp) and not any(fp.intersection(p.footprint()).area > 1.0 for p in fixed)
+        if ok:
+            fixed.append(o)
+            continue
+        r = _place(site, Plan(objects=fixed, it_mw=plan.it_mw), o.kind, o.w, o.l, o.h,
+                   (fixed[0].x, fixed[0].y) if fixed and fixed[0].kind == "data_hall" else anchor, o.id)
+        if r is not None:
+            fixed.append(r)
+            moved += 1
+    plan.objects = fixed
+    if moved:
+        plan.rationale = (plan.rationale or "") + f" [harness re-placed {moved} object(s) that were outside the buildable area or overlapping]"
+    # drop surplus generators, add missing equipment
+    need = required_counts(plan)["generator"]
+    gens = plan.by_kind("generator")
+    if len(gens) > need:
+        drop = {g.id for g in gens[need:]}
+        plan.objects = [o for o in plan.objects if o.id not in drop]
     counts = required_counts(plan)
     for kind, n in counts.items():
         have = plan.by_kind(kind)

@@ -22,6 +22,10 @@ DESIGNER_MODEL = os.getenv("DESIGNER_MODEL", "anthropic/claude-sonnet-4.5")
 REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "anthropic/claude-sonnet-4.5")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-small")
 EMBEDDING_DIMS = int(os.getenv("EMBEDDING_DIMS", "1536"))
+# Atlas Automated Embeddings (Voyage AI inside Atlas, M10+). When on, the repo never computes an
+# embedding: Atlas embeds `lessons.text` on write and embeds the query text on $vectorSearch.
+ATLAS_AUTO_EMBED = os.getenv("ATLAS_AUTO_EMBED", "true").lower() in {"1", "true", "yes"}
+ATLAS_EMBED_MODEL = os.getenv("ATLAS_EMBED_MODEL", "voyage-3.5")
 
 # --- Units ---------------------------------------------------------------
 FT = 0.3048  # metres per foot
