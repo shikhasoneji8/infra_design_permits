@@ -44,6 +44,7 @@ class HarnessState(TypedDict, total=False):
     best_review: Optional[dict]
     best_design_id: Optional[str]
     regression: Optional[dict]
+    stall: int
 
 
 def review_from_doc(doc: dict) -> Review:
@@ -63,7 +64,7 @@ def retrieval_query(site: Site, prev_review: Review | None) -> str:
 
 def build_graph(store, use_llm: bool = True, crash_after_round: int | None = None,
                 designer_model: str = C.DESIGNER_MODEL, reviewer_model: str = C.REVIEWER_MODEL,
-                on_round=None, checkpointer=None):
+                on_round=None, checkpointer=None, use_memory: bool = True):
     site_cache: dict[str, Site] = {}
 
     def site_of(state) -> Site:
@@ -77,6 +78,8 @@ def build_graph(store, use_llm: bool = True, crash_after_round: int | None = Non
         site = site_of(state)
         prev = review_from_doc(state["prev_review"]) if state.get("prev_review") else None
         q = retrieval_query(site, prev)
+        if not use_memory:  # A/B baseline: same harness, no recall from Atlas
+            return {"lessons": [], "precedents": [], "round": state.get("round", 0) + 1, "round_started": time.time()}
         raw = store.similar_lessons_text(q, k=12) if hasattr(store, "similar_lessons_text") else \
             store.similar_lessons(embed([q])[0], k=12)
         lessons, seen = [], set()
@@ -93,6 +96,13 @@ def build_graph(store, use_llm: bool = True, crash_after_round: int | None = Non
         site = site_of(state)
         prev_plan = Plan.model_validate(state["prev_plan"]) if state.get("prev_plan") else None
         prev = review_from_doc(state["prev_review"]) if state.get("prev_review") else None
+        # Stall breaker: if the best penalty has not moved for STALL_ROUNDS rounds, hand the best plan to the
+        # deterministic policy for one round (it changes equipment, e.g. low-noise fans, which the model
+        # keeps refusing to do), then give control back to the model.
+        if prev_plan is not None and state.get("stall", 0) >= C.STALL_ROUNDS:
+            plan = designer.heuristic_design(site, prev_plan, prev)
+            plan.rationale = "stall breaker: deterministic policy applied to the best plan. " + (plan.rationale or "")
+            return {"plan": plan.compact(), "source": "stall-breaker"}
         plan, source = designer.design(site, prev_plan, prev, state.get("lessons", []), use_llm=use_llm,
                                        model=designer_model, regression=state.get("regression"))
         return {"plan": plan.compact(), "source": source}
@@ -129,12 +139,15 @@ def build_graph(store, use_llm: bool = True, crash_after_round: int | None = Non
         # Hill-climb: the next round always starts from the best plan so far. A worse attempt is
         # recorded (designs/reviews/lessons) but never becomes the base for the next design.
         best_rev = state.get("best_review")
-        if best_rev is None or rev.penalty <= best_rev["penalty"]:
+        if best_rev is None or rev.penalty < best_rev["penalty"]:
             best = {"best_plan": state["plan"], "best_review": rev.to_doc(), "best_design_id": state["design_id"],
-                    "regression": None}
+                    "regression": None, "stall": 0}
+        elif rev.penalty == best_rev["penalty"]:
+            best = {"best_plan": state["plan"], "best_review": rev.to_doc(), "best_design_id": state["design_id"],
+                    "regression": None, "stall": state.get("stall", 0) + 1}
         else:
             best = {"regression": {"penalty": rev.penalty, "rules": [v.rule for v in rev.violations],
-                                   "best_penalty": best_rev["penalty"]}}
+                                   "best_penalty": best_rev["penalty"]}, "stall": state.get("stall", 0) + 1}
         return {"rejection": rejection, "status": status, "prev_plan": best.get("best_plan", state.get("best_plan")),
                 "prev_review": best.get("best_review", state.get("best_review")),
                 "parent_design_id": best.get("best_design_id", state.get("best_design_id")), **best}
@@ -170,4 +183,4 @@ def initial_state(site_id: str, run_id: str, max_rounds: int) -> HarnessState:
     return {"site_id": site_id, "run_id": run_id, "round": 0, "max_rounds": max_rounds, "prev_plan": None,
             "prev_review": None, "parent_design_id": None, "lessons": [], "plan": None, "review": None,
             "design_id": None, "rejection": "", "source": "", "status": "running", "precedents": [],
-            "best_plan": None, "best_review": None, "best_design_id": None, "regression": None}
+            "best_plan": None, "best_review": None, "best_design_id": None, "regression": None, "stall": 0}

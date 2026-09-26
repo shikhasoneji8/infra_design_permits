@@ -20,7 +20,8 @@ console = Console()
 
 def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: bool = False,
         use_llm: bool = True, crash_after_round: int | None = None, sleep_s: float = 0.0,
-        designer_model: str = C.DESIGNER_MODEL, reviewer_model: str = C.REVIEWER_MODEL) -> dict:
+        designer_model: str = C.DESIGNER_MODEL, reviewer_model: str = C.REVIEWER_MODEL,
+        use_memory: bool = True) -> dict:
     store = store or MongoStore()
     site_doc = store.get_site(site_id)
     if not site_doc:
@@ -34,7 +35,7 @@ def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: boo
 
     graph = build_graph(store, use_llm=use_llm, crash_after_round=None if resume else crash_after_round,
                         designer_model=designer_model, reviewer_model=reviewer_model,
-                        on_round=_print_round, checkpointer=store.checkpointer())
+                        on_round=_print_round, checkpointer=store.checkpointer(), use_memory=use_memory)
     cfg = {"configurable": {"thread_id": run_id}, "recursion_limit": max_rounds * 6 + 10}
 
     snapshot = graph.get_state(cfg)
@@ -46,7 +47,7 @@ def run(site_id: str, run_id: str, store=None, max_rounds: int = 12, resume: boo
         if resume:
             console.print("[yellow]no checkpoint to resume; starting fresh[/yellow]")
         store.create_run(run_id, site_id, max_rounds)
-        console.rule(f"[bold]NEW RUN {run_id} on {site.name} ({site.acres:.1f} ac, {len(site.homes)} homes, "
+        console.rule(f"[bold]NEW RUN {run_id}{'' if use_memory else ' (MEMORY OFF)'} on {site.name} ({site.acres:.1f} ac, {len(site.homes)} homes, "
                      f"{len(site.wetlands)} wetlands) store={store.name} checkpointer={type(store.checkpointer()).__name__}")
         final = graph.invoke(initial_state(site_id, run_id, max_rounds), cfg)
 
