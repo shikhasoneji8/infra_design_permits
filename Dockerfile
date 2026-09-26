@@ -6,5 +6,6 @@ COPY app ./app
 COPY scripts ./scripts
 COPY data ./data
 RUN pip install --no-cache-dir .
-ENV PORT=8000
+ENV PORT=7860
+EXPOSE 7860
 CMD uvicorn app.server:app --host 0.0.0.0 --port ${PORT}

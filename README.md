@@ -1,3 +1,13 @@
+---
+title: Permit Harness
+emoji: 🏗️
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Permit Harness: a data center that redesigns itself until New Jersey says yes
 
 Data centers take years to permit because every redesign starts from scratch.

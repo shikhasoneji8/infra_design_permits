@@ -2,7 +2,7 @@ services:
   - type: web
     name: permit-harness
     runtime: docker
-    plan: starter
+    plan: free
     envVars:
       - key: MONGODB_URI
         sync: false
